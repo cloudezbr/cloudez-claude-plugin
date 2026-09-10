@@ -67,7 +67,7 @@ claude --plugin-dir /caminho/para/cloudez-claude-plugin
 Não há etapa de build. O servidor MCP em `mcp/` é versionado no repositório e
 todo o resto é fonte que roda direto, então o único pré-requisito é **Node 20+**.
 `./vendor-mcp.sh` é necessário apenas depois de alterar o servidor MCP, que vive
-em [repositório separado](https://github.com/configr/cloudez-mcp).
+em [repositório separado](https://github.com/cloudezbr/cloudez-mcp).
 
 Depois de editar qualquer arquivo do plugin, `/reload-plugins` recarrega sem
 reiniciar a sessão.
@@ -95,7 +95,7 @@ Local, para você mesmo:
 Para o time, depois de publicar o repositório:
 
 ```
-/plugin marketplace add configr/cloudez-claude-plugin
+/plugin marketplace add cloudezbr/cloudez-claude-plugin
 /plugin install cloudez@cloudez
 ```
 
