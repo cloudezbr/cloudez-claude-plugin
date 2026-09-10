@@ -17,6 +17,10 @@ está tudo certo.
 conta pega o token no painel, e **você não pode fazer isso por ele**. Quem não
 tem conta se cadastra aqui mesmo, e aí é você quem executa quase tudo.
 
+**Não anuncie o resultado da checagem** ("não há autenticação salva", "sem
+token ainda") — isso é mecanismo interno, não informação para o usuário. Vá
+direto para a pergunta abaixo.
+
 # 1. Ele já tem conta?
 
 **Pergunte.** É a bifurcação do comando inteiro, e não dá para deduzir do
@@ -24,9 +28,19 @@ ambiente.
 
 ## Se tem conta
 
-**Peça o endereço do painel dele.** Não presuma nenhum: a Cloudez é white-label, e
-cada revenda tem o seu domínio — `cloud.configr.com` é o da Configr, não é "o"
-painel. Inventar um manda o usuário para um site que não é o dele.
+**Se `cloudez_auth_status` já trouxe `panel_host`, use-o direto — não pergunte
+de novo.** É o mesmo painel que outro comando já confirmou nesta máquina
+antes, e reperguntar o que já se sabe é o tipo de atrito que faz o usuário
+achar que nada fica salvo.
+
+Sem `panel_host` na resposta, **peça o endereço do painel dele.** Não presuma
+nenhum: a Cloudez é white-label, e cada revenda tem o seu domínio —
+`cloud.configr.com` é o da Configr, não é "o" painel. Inventar um manda o
+usuário para um site que não é o dele.
+
+Peça só a pergunta em si ("qual o endereço do painel que você usa para
+entrar?"). Não mencione `panel_host` nem diga que nada foi salvo ainda — isso
+é estado interno, não faz parte da pergunta.
 
 Se ele não souber qual é, o endereço está no e-mail de boas-vindas da revenda, ou
 é o que ele usa para entrar todo dia.
@@ -38,9 +52,11 @@ que estiver na barra de endereços — `https://painel.exemplo.com/sites/123`, o
 veio produz `.../sites/123/account?tab=token`, que não existe.
 
 Se vier `panel_not_found`, o endereço está errado. Diga isso e peça de novo, em
-vez de mandá-lo abrir uma página que não vai carregar.
+vez de mandá-lo abrir uma página que não vai carregar. Confirmado com sucesso,
+o painel já fica gravado nesta máquina sozinho — não é preciso chamar mais
+nada para isso.
 
-Então, com o `panel_host` da resposta:
+Então, com o `panel_host`:
 
 ```
 Abra: https://<panel_host>/account?tab=token
@@ -140,11 +156,16 @@ Com `phone_verified: true`, a conta está ativa e o token já está salvo. Chame
 `cloudez_get_trial_plan` com `panel_host: "cloud.configr.com"` — o mesmo do
 cadastro. Sem `trial_ia_plan_id` no retorno, a Configr não tem plano trial
 configurado: **não chame `cloudez_setup_trial_cloud`**, siga direto para a
-frase de fechamento abaixo, que já cobre esse caso.
+frase de fechamento abaixo — é o caso "sem trial disponível", não "trial
+falhou".
 
 Com o `trial_ia_plan_id`, chame `cloudez_setup_trial_cloud` passando esse
-mesmo id, para contratar o cloud de teste grátis da conta — o que antes era
-"iniciar o teste" no painel.
+mesmo id, para contratar o cloud de teste grátis da conta. **A contratação do
+teste é sempre feita por esta tool — nunca é algo que o cliente faz por conta
+própria no painel.** Diferente da contratação paga (ver `/cloudez:setup`),
+que é deliberadamente manual porque envolve dinheiro e escolha de plano do
+usuário, o teste grátis não tem opção manual equivalente neste fluxo: se a
+tool não conseguir, o caminho é o suporte da Cloudez, não o painel.
 
 **Não repita a chamada se ela falhar.** Não é idempotente: se o provisionamento
 tiver ocorrido apesar do erro reportado, uma segunda chamada cria um SEGUNDO
@@ -153,28 +174,44 @@ cloud.
 - **`cloud_setup_unconfirmed`** — a chamada falhou DEPOIS de enviada (visto na
   prática: provisionar demora, e um timeout não significa que nada foi criado).
   Chame `cloudez_list_clouds` antes de dizer qualquer coisa ao usuário: se o
-  cloud já aparecer lá, trate como sucesso; só diga que falta contratar se ele
-  realmente não existir.
+  cloud já aparecer lá, trate como sucesso; se ele realmente não existir, trate
+  como o caso "trial falhou" da frase de fechamento abaixo.
 - **`trial_already_exists`** — a conta já tem um cloud. Chame `cloudez_list_clouds`
   e trate como sucesso: não é erro, é a conta já pronta para o próximo passo.
 - **`cloud_limit_reached`** — limite de clouds da conta. Não é algo que se
   resolve por aqui: diga ao usuário para contatar o suporte da Cloudez.
 
 **Feche em uma ou duas frases curtas, não numeradas.** O usuário não precisa do
-passo a passo interno — só do que muda para ele. No caminho feliz:
+passo a passo interno — só do que muda para ele. **Não lidere com o painel nem
+com definir senha** — uma conta recém-criada, no caminho feliz, não precisa de
+nenhum dos dois para o que vem a seguir, que é ter um site publicado. No
+caminho feliz:
 
-> Sua conta foi criada com sucesso. Acesse seu e-mail para definir sua senha —
-> é assim que você entra no painel.
+> Sua conta foi criada com sucesso, com uma cloud de teste já pronta. Quer que
+> eu continue e configure o deploy da sua aplicação agora?
 
-Não é preciso mencionar `company_name` nem o cloud/servidor separadamente
-quando os dois passos deram certo: "conta criada com sucesso" já cobre.
+Se ele topar, siga para `/cloudez:setup`. Não é preciso mencionar
+`company_name` nem o cloud/servidor separadamente quando os dois passos deram
+certo: "conta criada com sucesso" já cobre.
 
-Só acrescente algo além disso quando um dos dois **não** deu certo:
+O e-mail para definir a senha do painel só entra na conversa quando o usuário
+precisar de fato acessar o painel — não como parte do fechamento padrão.
 
-- `password_email_sent: false` — troque a frase do e-mail: diga que falta
-  esse passo e que ele usa "esqueci minha senha" no painel;
-- `cloudez_setup_trial_cloud` falhou — acrescente uma frase dizendo que falta
-  contratar o teste em `https://cloud.configr.com`.
+Só acrescente algo além do fechamento padrão quando um dos dois **não** deu
+certo:
+
+- `password_email_sent: false` — aqui sim mencione o e-mail: diga que esse
+  passo falhou e que ele usa "esqueci minha senha" no painel para definir a
+  dele;
+- sem `trial_ia_plan_id` (esta revenda não tem plano trial configurado) —
+  diga que não há teste grátis disponível, e que para ter um cloud é preciso
+  contratar um plano em `https://cloud.configr.com/clouds/create`. Isso é
+  contratação paga, não o teste — a distinção importa porque é a única vez
+  neste comando em que mandar o cliente ao painel é a resposta certa;
+- `cloudez_setup_trial_cloud` falhou e `cloudez_list_clouds` confirmou que o
+  cloud não existe — diga que a conta foi criada mas o teste grátis não pôde
+  ser provisionado, e peça para ele contatar o suporte da Cloudez. **Não**
+  mande para o painel: contratar o teste não é algo que o cliente faz sozinho.
 
 # 2. Capturar o token
 

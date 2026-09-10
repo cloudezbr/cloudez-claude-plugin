@@ -113,14 +113,17 @@ passo 1 — não algo que ele precise fazer no painel primeiro.
 cloudez_list_clouds()
 ```
 
-- **Nenhuma cloud** — **encerre.** Não há onde criar um site. Ele precisa de
-  uma cloud antes: `/cloudez:login` termina contratando um trial gratuito para
-  conta nova (`cloudez_setup_trial_cloud`), ou ele contrata uma pelo painel;
+- **Nenhuma cloud** — vá direto para "Contratar uma cloud nova", abaixo. Isto é
+  conta antiga sem trial nenhum contratado; não confunda com conta nova, que já
+  sai do `/cloudez:login` com uma (`cloudez_setup_trial_cloud`);
 - **Uma cloud só** — use o `id` dela direto, sem perguntar: não há entre o quê
   escolher;
-- **Mais de uma** — pergunte qual, mostrando `name` e `fqdn` de cada uma.
+- **Mais de uma** — pergunte qual com AskUserQuestion, mostrando `name` e
+  `fqdn` de cada uma, e acrescente "contratar uma nova" como opção — o usuário
+  pode querer uma cloud separada mesmo já tendo outras.
 
-Com o `id` escolhido:
+Se ele escolher "contratar uma nova", vá para "Contratar uma cloud nova",
+abaixo. Do contrário, com o `id` escolhido:
 
 ```
 cloudez_create_site(cloud: <id>, domain: "<domain do passo 1>")
@@ -147,6 +150,17 @@ onde os passos 4 a 6 disserem "o `cloudez_get_site` do passo 2", leia-se
 "a confirmação do passo 2, seja ela `cloudez_get_site` ou `cloudez_create_site`".
 Os passos 5 a 7 seguem sem alteração: o site nasceu já do tipo `claude`, então
 a checagem de tipo do passo 5 passa direto.
+
+#### Contratar uma cloud nova
+
+Siga o procedimento de `/cloudez:hire-cloud` — é o mesmo comando que atende
+quem pede para contratar uma cloud fora deste fluxo, e o procedimento não é
+duplicado aqui: ele já cuida do painel (perguntando só se ainda não houver um
+lembrado nesta máquina), do aviso de que é sempre contratação paga, e do
+antes/depois de `cloudez_list_clouds` para achar a cloud nova.
+
+Com a cloud nova identificada, volte para `cloudez_create_site`, acima, usando
+o `id` dela — sem perguntar, se veio uma só.
 
 ## 3. Environment
 

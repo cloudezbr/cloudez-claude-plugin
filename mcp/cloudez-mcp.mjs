@@ -27078,6 +27078,12 @@ function tokenFile() {
   const home = process.env.HOME || process.env.USERPROFILE || "";
   return `${home}/.cloudez/token`;
 }
+function panelHostFile() {
+  const override = process.env.CLOUDEZ_PANEL_HOST_FILE;
+  if (override) return override;
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  return `${home}/.cloudez/panel_host`;
+}
 
 // src/auth.ts
 import { readFile } from "node:fs/promises";
@@ -27085,8 +27091,10 @@ import { readFile } from "node:fs/promises";
 // src/errors.ts
 var ToolError = class extends Error {
   body;
-  // Corpo cru do 400, só para quem lançou poder reconhecer um campo específico (ver cloud.ts).
-  // Nunca sai daqui: errorResult() só serializa `body`, então isto não vaza para o modelo.
+  /**
+   * Corpo cru do 400, só para quem lançou poder reconhecer um campo específico (ver cloud.ts).
+   * Nunca sai daqui: errorResult() só serializa `body`, então isto não vaza para o modelo.
+   */
   rawBody;
   constructor(code, message, opts = {}) {
     super(message);
@@ -27925,11 +27933,11 @@ async function beginDeploy(args) {
   const deployId2 = deployId(releaseId, idempotencyKey);
   const root = stripHome(args.root);
   const releasePath = `${root}/releases/${releaseId}`;
-  const mkdir2 = await sshRun(ssh, `mkdir -p '${releasePath}' '${root}/releases' '${root}/shared'`);
-  if (mkdir2.code !== 0) {
+  const mkdir3 = await sshRun(ssh, `mkdir -p '${releasePath}' '${root}/releases' '${root}/shared'`);
+  if (mkdir3.code !== 0) {
     throw new ToolError("ssh_failed", `N\xE3o foi poss\xEDvel preparar o diret\xF3rio de release em ${ssh.host}.`, {
       retryable: true,
-      hint: (mkdir2.stderr || mkdir2.stdout).trim() || void 0
+      hint: (mkdir3.stderr || mkdir3.stdout).trim() || void 0
     });
   }
   const state = {
@@ -27938,8 +27946,10 @@ async function beginDeploy(args) {
     environment: args.environment ?? "",
     domain: args.domain,
     ref: args.ref ?? "",
-    // Gravado mesmo quando o sufixo veio do git: o commit descreve o fonte, e no caminho sem
-    // container o que se publica é a saída do build, que o mesmo commit não fixa.
+    /**
+     * Gravado mesmo quando o sufixo veio do git: o commit descreve o fonte, e no caminho sem
+     * container o que se publica é a saída do build, que o mesmo commit não fixa.
+     */
     content_sha256: args.content_sha256 ?? "",
     note: args.note ?? "",
     status: "awaiting_upload",
@@ -28327,11 +28337,15 @@ ${res.stderr}`;
     ...composeFiles(res.stdout),
     ...envLinked ? { env_file: envLinked } : {},
     ...shared.length > 0 ? { shared } : {},
-    // Separado porque é o único deploy em que aquele diretório nasceu. Reaparecer aqui significa
-    // que alguém apagou o de `shared/`.
+    /**
+     * Separado porque é o único deploy em que aquele diretório nasceu. Reaparecer aqui significa
+     * que alguém apagou o de `shared/`.
+     */
     ...criados.length > 0 ? { shared_created: criados } : {},
-    // Vieram da release anterior: é a migração do dado de um site que já rodava, e acontece uma
-    // vez por diretório.
+    /**
+     * Vieram da release anterior: é a migração do dado de um site que já rodava, e acontece uma
+     * vez por diretório.
+     */
     ...migrados.length > 0 ? { shared_migrated: migrados } : {},
     ...recreated ? { recreated: recreated === "yes" } : {},
     containers
@@ -29388,6 +29402,25 @@ async function listClouds() {
   };
 }
 
+// src/panel-host-store.ts
+import { mkdir as mkdir2, readFile as readFile4, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname4 } from "node:path";
+async function rememberedPanelHost() {
+  try {
+    const contents = (await readFile4(panelHostFile(), "utf8")).trim();
+    return contents || null;
+  } catch {
+    return null;
+  }
+}
+async function rememberPanelHost(entrada) {
+  const host = normalizePanelHost(entrada);
+  const arquivo = panelHostFile();
+  await mkdir2(dirname4(arquivo), { recursive: true, mode: 448 });
+  await writeFile2(arquivo, host + "\n");
+  return host;
+}
+
 // src/index.ts
 var server = new McpServer({
   name: "Cloudez MCP",
@@ -29397,7 +29430,7 @@ server.registerTool(
   "cloudez_auth_status",
   {
     title: "Estado da autentica\xE7\xE3o na Cloudez",
-    description: "Informa se h\xE1 um token da Cloudez utiliz\xE1vel nesta m\xE1quina. Chame antes da primeira opera\xE7\xE3o que fale com a Cloudez numa sess\xE3o, e sempre que outra tool falhar com not_authenticated ou token_invalid, para saber se o problema \xE9 credencial. N\xE3o recebe nem devolve o token: se n\xE3o houver autentica\xE7\xE3o, o caminho \xE9 o `/cloudez:login`, que cadastra pelas tools quem n\xE3o tem conta \u2014 sem nada para rodar no terminal \u2014 e leva ao painel quem j\xE1 tem. Nunca pe\xE7a o token na conversa.",
+    description: "Informa se h\xE1 um token da Cloudez utiliz\xE1vel nesta m\xE1quina, e devolve tamb\xE9m o panel_host lembrado, se cloudez_panel_info j\xE1 tiver confirmado um nesta m\xE1quina antes \u2014 n\xE3o pergunte o painel ao usu\xE1rio antes de conferir aqui. Chame antes da primeira opera\xE7\xE3o que fale com a Cloudez numa sess\xE3o, e sempre que outra tool falhar com not_authenticated ou token_invalid, para saber se o problema \xE9 credencial. N\xE3o recebe nem devolve o token: se n\xE3o houver autentica\xE7\xE3o, o caminho \xE9 o `/cloudez:login`, que cadastra pelas tools quem n\xE3o tem conta \u2014 sem nada para rodar no terminal \u2014 e leva ao painel quem j\xE1 tem. `authenticated: true` N\xC3O \xE9 algo para relatar ao usu\xE1rio \u2014 \xE9 s\xF3 o sinal para seguir com o que ele pediu, em sil\xEAncio; s\xF3 vale falar sobre autentica\xE7\xE3o quando ela FALTAR, ou quando checar o login for o pr\xF3prio pedido dele. Nunca pe\xE7a o token na conversa.",
     inputSchema: object({}),
     // Sem efeito colateral, então pode entrar no allowlist do usuário e nunca gerar prompt.
     annotations: { readOnlyHint: true, openWorldHint: true }
@@ -29406,12 +29439,14 @@ server.registerTool(
     try {
       const token = await resolveToken();
       const source = await tokenSource();
+      const panelHost = await rememberedPanelHost();
       if (!token) {
         return okResult({
           authenticated: false,
           source,
           token_file: tokenFile(),
           verified: false,
+          ...panelHost ? { panel_host: panelHost } : {},
           ...loginHint(),
           warning: "N\xE3o pe\xE7a o token na conversa: colado aqui, ele fica no transcript da sess\xE3o."
         });
@@ -29422,6 +29457,7 @@ server.registerTool(
         source,
         token_file: tokenFile(),
         verified: verdict === "valid",
+        ...panelHost ? { panel_host: panelHost } : {},
         // Recusado dá no mesmo que não ter nenhum: a instrução para o usuário é a mesma.
         ...verdict === "invalid" && {
           ...loginHint(),
@@ -29851,17 +29887,22 @@ server.registerTool(
   "cloudez_panel_info",
   {
     title: "Identificar o painel da Cloudez",
-    description: "Diz de que empresa \xE9 um endere\xE7o de painel da Cloudez e se ela abre cadastro por ali. Chame ANTES de mandar o usu\xE1rio para uma p\xE1gina do painel e antes de cloudez_signup: a Cloudez \xE9 white-label, cada revenda tem o seu dom\xEDnio, e um endere\xE7o digitado errado s\xF3 apareceria depois, com o usu\xE1rio j\xE1 perdido no navegador. N\xE3o precisa de token.",
+    description: "Diz de que empresa \xE9 um endere\xE7o de painel da Cloudez e se ela abre cadastro por ali. Chame ANTES de mandar o usu\xE1rio para uma p\xE1gina do painel e antes de cloudez_signup: a Cloudez \xE9 white-label, cada revenda tem o seu dom\xEDnio, e um endere\xE7o digitado errado s\xF3 apareceria depois, com o usu\xE1rio j\xE1 perdido no navegador. N\xE3o precisa de token. Confirmado com sucesso, o panel_host j\xE1 sai gravado localmente nesta m\xE1quina \u2014 n\xE3o \xE9 preciso chamar cloudez_remember_panel_host depois: essa grava\xE7\xE3o era um passo separado, sem efeito vis\xEDvel na resposta, e por isso ficava de fora com frequ\xEAncia demais na pr\xE1tica. Ela virou efeito colateral desta tool porque esta \xE9 chamada sempre que h\xE1 um panel_host para confirmar.",
     inputSchema: object({
       panel_host: string2().describe(
         "Endere\xE7o do painel do usu\xE1rio. Pode ser a URL inteira que ele copiou (https://cloud.configr.com/sites/12), que s\xF3 o host \xE9 usado."
       )
     }),
-    annotations: { readOnlyHint: true, openWorldHint: true }
+    annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true }
   },
   async ({ panel_host }) => {
     try {
-      return okResult({ ...await panelInfo(panel_host) });
+      const painel = await panelInfo(panel_host);
+      try {
+        await rememberPanelHost(painel.panel_host);
+      } catch {
+      }
+      return okResult({ ...painel });
     } catch (err) {
       return errorResult(err);
     }
@@ -29931,7 +29972,7 @@ server.registerTool(
   "cloudez_get_trial_plan",
   {
     title: "Consultar o plano trial configurado para um painel",
-    description: "Diz se o painel informado tem um plano de teste gr\xE1tis configurado, e devolve o `trial_ia_plan_id` que cloudez_setup_trial_cloud precisa para provisionar. Chame SEMPRE antes dela \u2014 ela n\xE3o resolve esse id sozinha. A consulta \xE9 AUTENTICADA \u2014 precisa de token \u2014 porque a Cloudez s\xF3 devolve esse campo para quem j\xE1 tem conta; a vers\xE3o an\xF4nima \xE9 cloudez_panel_info, e ela nunca traz este campo. Aus\xEAncia de `trial_ia_plan_id` no retorno significa que a revenda n\xE3o tem plano trial configurado: n\xE3o h\xE1 o que provisionar, avise o usu\xE1rio para contratar manualmente pelo painel.",
+    description: "Diz se o painel informado tem um plano de teste gr\xE1tis configurado, e devolve o `trial_ia_plan_id` que cloudez_setup_trial_cloud precisa para provisionar. Chame SEMPRE antes dela \u2014 ela n\xE3o resolve esse id sozinha. A consulta \xE9 AUTENTICADA \u2014 precisa de token \u2014 porque a Cloudez s\xF3 devolve esse campo para quem j\xE1 tem conta; a vers\xE3o an\xF4nima \xE9 cloudez_panel_info, e ela nunca traz este campo. Aus\xEAncia de `trial_ia_plan_id` no retorno significa que a revenda n\xE3o tem plano trial configurado: n\xE3o h\xE1 o que provisionar, avise o usu\xE1rio para contratar em `<panel_host>/clouds/create`. S\xD3 CHAME dentro do cadastro de conta nova, logo ap\xF3s cloudez_signup ou cloudez_confirm_phone \u2014 nunca em resposta a um pedido solto de 'contratar um cloud' numa conta que j\xE1 existe, mesmo sem cloud nenhuma: trial \xE9 o que uma conta nova ganha de gra\xE7a, n\xE3o uma op\xE7\xE3o a oferecer a quem j\xE1 tem conta. Para essa conta, n\xE3o h\xE1 tool \u2014 a contrata\xE7\xE3o \xE9 sempre manual, em `<panel_host>/clouds/create`.",
     inputSchema: object({
       panel_host: string2().describe("Host do painel, o mesmo passado a cloudez_signup (cloud.configr.com)")
     }),
@@ -29949,7 +29990,7 @@ server.registerTool(
   "cloudez_setup_trial_cloud",
   {
     title: "Provisionar o cloud trial gratuito da conta",
-    description: "Contrata o cloud de teste gratuito da conta autenticada, o mesmo que o usu\xE1rio contrataria manualmente no painel em 'iniciar o teste'. Chame SEMPRE depois de cloudez_get_trial_plan, com o `trial_ia_plan_id` que ela devolveu \u2014 esta tool n\xE3o descobre esse id sozinha, e n\xE3o aceita um n\xFAmero que n\xE3o venha de l\xE1: `plan_type` no endpoint da Cloudez aceita QUALQUER plano ativo da empresa, pago inclusive, ent\xE3o um id errado contrataria outra coisa, n\xE3o um trial. Chame uma vez, logo depois de cloudez_signup (ou de cloudez_confirm_phone, quando o cadastro tiver pedido SMS): uma conta nova n\xE3o tem cloud nenhuma, e sem isso o /cloudez:setup falharia num ponto bem menos claro que aqui. N\xC3O chame se a conta j\xE1 puder ter uma cloud \u2014 esta tool n\xE3o confere isso antes de provisionar, e chamar de novo cria uma SEGUNDA. N\xE3o \xE9 idempotente.",
+    description: "Contrata o cloud de teste gratuito da conta autenticada, o mesmo que o usu\xE1rio contrataria manualmente no painel em 'iniciar o teste'. Chame SEMPRE depois de cloudez_get_trial_plan, com o `trial_ia_plan_id` que ela devolveu \u2014 esta tool n\xE3o descobre esse id sozinha, e n\xE3o aceita um n\xFAmero que n\xE3o venha de l\xE1: `plan_type` no endpoint da Cloudez aceita QUALQUER plano ativo da empresa, pago inclusive, ent\xE3o um id errado contrataria outra coisa, n\xE3o um trial. Chame uma vez, logo depois de cloudez_signup (ou de cloudez_confirm_phone, quando o cadastro tiver pedido SMS): uma conta nova n\xE3o tem cloud nenhuma, e sem isso o /cloudez:setup falharia num ponto bem menos claro que aqui. N\xC3O chame se a conta j\xE1 puder ter uma cloud \u2014 esta tool n\xE3o confere isso antes de provisionar, e chamar de novo cria uma SEGUNDA. N\xE3o \xE9 idempotente. N\xC3O \xE9 resposta para um pedido de 'contratar um cloud' fora do cadastro \u2014 nem para uma conta antiga sem cloud nenhuma: trial \xE9 benef\xEDcio de conta nova, n\xE3o algo a oferecer a quem j\xE1 tem conta. Contrata\xE7\xE3o paga n\xE3o tem tool, de prop\xF3sito \u2014 \xE9 dinheiro de verdade e escolha de plano do usu\xE1rio: oriente abrir `<panel_host>/clouds/create` no painel.",
     inputSchema: object({
       trial_ia_plan_id: number2().describe("Id do plano trial, devolvido por cloudez_get_trial_plan")
     }),
