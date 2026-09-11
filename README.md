@@ -115,12 +115,13 @@ Com o plugin ativo:
   conduz o usuário até ele: pergunta se já tem conta, aponta a página certa do
   painel dele (ou o cadastro, se for o caso) e captura o token sem que ele passe
   pela conversa;
-- `/cloudez:hire-cloud` — contrata uma cloud paga na Cloudez, sempre pelo
+- `/cloudez:hire-cloud` — contrata uma cloud nova na Cloudez. Pedido por
+  **teste grátis** é provisionado pelas tools (`cloudez_get_trial_plan` e
+  `cloudez_setup_trial_cloud`), o mesmo caminho do cadastro: o trial é um por
+  conta, e quem recusa o segundo é a Cloudez. Pedido **pago** é sempre pelo
   painel (`<panel_host>/clouds/create`) — não existe tool para pagamento, de
-  propósito. **Nunca oferece o teste grátis**: o trial só existe
-  automaticamente no cadastro de conta nova, dentro do `/cloudez:login`. O
-  `/cloudez:setup` delega para este comando quando a conta não tem onde criar
-  um site, em vez de duplicar o procedimento;
+  propósito. O `/cloudez:setup` delega para este comando quando a conta não tem
+  onde criar um site, em vez de duplicar o procedimento;
 - `/cloudez:setup <domain> <environment>` — cria o `.cloudez.yaml` do projeto, se
   ainda não existir. Os dois argumentos são obrigatórios: o domínio identifica o
   site, o environment dá nome ao bloco gerado. Faltando algum, o comando pergunta.
@@ -380,16 +381,25 @@ Em linguagem natural: *"volta a versão anterior"*, *"desfaz o último deploy"*,
       trial nenhum) não tem onde criar o site, ou quando o usuário prefere uma
       cloud nova a uma das existentes — delegando para `/cloudez:hire-cloud`
       em vez de duplicar o procedimento
-- [x] `/cloudez:hire-cloud`, comando próprio para contratar uma cloud paga
-      fora do `/cloudez:setup` — quem pede "quero contratar uma cloud" em
-      linguagem natural, sem estar no meio da criação de um site, caía antes
-      numa conversa improvisada, sem procedimento nenhum por trás. Não existe
-      tool para contratar: é dinheiro de verdade e escolha de plano, então o
+- [x] `/cloudez:hire-cloud`, comando próprio para contratar uma cloud fora do
+      `/cloudez:setup` — quem pede "quero contratar uma cloud" em linguagem
+      natural, sem estar no meio da criação de um site, caía antes numa
+      conversa improvisada, sem procedimento nenhum por trás. Para contratação
+      paga não existe tool: é dinheiro de verdade e escolha de plano, então o
       comando manda o usuário para `https://<panel_host>/clouds/create` e
       espera ele confirmar — não há polling — antes de comparar
-      `cloudez_list_clouds` de antes e depois para achar a cloud nova. **Nunca
-      oferece o teste grátis**: o trial só existe automaticamente no cadastro
-      de conta nova. **Não foi exercitado contra a API real**
+      `cloudez_list_clouds` de antes e depois para achar a cloud nova. **Não
+      foi exercitado contra a API real**
+- [x] ~~O teste grátis só existia no cadastro de conta nova: quem já tinha
+      conta e pedia um cloud de teste era recusado pelo `/cloudez:hire-cloud`,
+      que o mandava para a contratação paga.~~ **Fechada**: o pedido por teste
+      numa conta existente segue o mesmo caminho do cadastro
+      (`cloudez_get_trial_plan` e `cloudez_setup_trial_cloud`), e o limite de
+      um trial por conta continua sendo decidido pela Cloudez, que recusa o
+      segundo com `trial_already_exists` — o comando não tenta deduzir quem
+      ainda tem direito, porque `cloudez_list_clouds` erra nos dois sentidos:
+      uma cloud paga não consome o trial, e uma conta sem cloud nenhuma pode
+      já tê-lo gasto
 - [x] `panel_host` lembrado por máquina, em `~/.cloudez/panel_host` (irmão do
       `token`, mas sem `chmod 0600` — não é segredo). Antes disso, todo comando
       que precisava do painel perguntava de novo, mesmo quando o usuário já

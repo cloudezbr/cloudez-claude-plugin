@@ -1360,13 +1360,18 @@ código de novo.
 Não é fixo nem sobreponível por ambiente: é POR EMPRESA, lido de novo a cada
 chamada.
 
-**Só se chama dentro do cadastro de conta nova**, logo após `cloudez_signup`
-ou `cloudez_confirm_phone` — nunca em resposta a um pedido solto de
-"contratar um cloud" numa conta que já existe, mesmo sem cloud nenhuma: trial
-é o que uma conta nova ganha de graça, não uma opção para quem já tem conta.
-Ausência de `trial_ia_plan_id` (revenda sem plano trial configurado) e
-"contratar cloud numa conta existente" levam ao mesmo lugar — não há tool: a
-contratação é manual, em `<panel_host>/clouds/create` (ver §3.23).
+**Chama-se em dois lugares**: no cadastro de conta nova, logo após
+`cloudez_signup` ou `cloudez_confirm_phone`, e no `/cloudez:hire-cloud`,
+quando uma conta que já existe pede um cloud **de teste**. O trial é um por
+conta, e quem recusa o segundo é a Cloudez, em `cloudez_setup_trial_cloud`
+(§3.20), com `trial_already_exists` — não é o plugin que decide quem ainda tem
+direito, e tentar deduzir isso de `cloudez_list_clouds` erra nos dois sentidos:
+uma cloud paga não consome o trial, e uma conta sem cloud nenhuma pode já
+tê-lo gasto.
+
+Pedido de contratação **paga**, e ausência de `trial_ia_plan_id` (revenda sem
+plano trial configurado), levam ao mesmo lugar — não há tool: a contratação é
+manual, em `<panel_host>/clouds/create` (ver §3.23).
 
 ---
 
@@ -1432,13 +1437,16 @@ a tool não extrai campos nomeados — o que a API devolver sai inteiro em
 
 **Não é idempotente, e a tool não confere se a conta já tem cloud antes de
 provisionar.** Chamar duas vezes cria duas clouds. A descrição da tool instrui
-quem chama a rodá-la uma vez só, logo após o cadastro.
+quem chama a rodá-la uma vez por conta — no cadastro, ou no
+`/cloudez:hire-cloud` quando o pedido é por um cloud de teste.
 
-**Não é resposta para "contratar um cloud" fora do cadastro** — nem para uma
-conta antiga sem cloud nenhuma. Trial é benefício de conta nova; contratação
-paga não tem tool, de propósito (§3.23): é dinheiro de verdade e escolha de
-plano do usuário, não algo que se decida por ele. A orientação nesse caso é
-sempre a mesma, manual: abrir `<panel_host>/clouds/create` no painel.
+**É resposta para "quero um cloud de teste" numa conta que já existe**, e não
+só para o cadastro: o limite de um trial por conta é da Cloudez, que recusa o
+segundo com `trial_already_exists` (abaixo). **Não é resposta para
+"contratar um cloud" sem adjetivo**: contratação paga não tem tool, de
+propósito (§3.23) — é dinheiro de verdade e escolha de plano do usuário, não
+algo que se decida por ele. A orientação nesse caso é sempre a mesma, manual:
+abrir `<panel_host>/clouds/create` no painel.
 
 **Provisionar demora — visto na prática, mais que os 10s padrão de qualquer
 outra chamada.** Por isso o POST usa um timeout próprio, de 120s
@@ -1616,9 +1624,11 @@ registrada para não ser redescoberta do zero:
 - **Contratar um cloud pago** — decisão deliberada, não lacuna a preencher.
   É dinheiro de verdade saindo da conta do usuário, e a escolha de plano e o
   pagamento não são algo que se decida por ele. Toda orientação de contratação
-  fora do trial de cadastro (§3.19, §3.20) aponta para o mesmo lugar, manual:
-  `<panel_host>/clouds/create` — não o domínio raiz do painel, que não leva
-  direto à contratação.
+  paga aponta para o mesmo lugar, manual: `<panel_host>/clouds/create` — não o
+  domínio raiz do painel, que não leva direto à contratação. O **teste grátis**
+  é o caso oposto e tem tool (§3.19, §3.20): não custa nada, o plano não é
+  escolha do usuário, e vale tanto no cadastro quanto num pedido posterior de
+  quem já tem conta.
 
 Hooks pós-deploy (restart, cache clear) também saíram: o `finalize` não roda mais
 comando nenhum no servidor além da troca do symlink. Veja a pendência 2.
