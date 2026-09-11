@@ -67,7 +67,7 @@ claude --plugin-dir /caminho/para/cloudez-claude-plugin
 Não há etapa de build. O servidor MCP em `mcp/` é versionado no repositório e
 todo o resto é fonte que roda direto, então o único pré-requisito é **Node 20+**.
 `./vendor-mcp.sh` é necessário apenas depois de alterar o servidor MCP, que vive
-em [repositório separado](https://github.com/configr/cloudez-mcp).
+em [repositório separado](https://github.com/cloudezbr/cloudez-mcp).
 
 Depois de editar qualquer arquivo do plugin, `/reload-plugins` recarrega sem
 reiniciar a sessão.
@@ -95,7 +95,7 @@ Local, para você mesmo:
 Para o time, depois de publicar o repositório:
 
 ```
-/plugin marketplace add configr/cloudez-claude-plugin
+/plugin marketplace add cloudezbr/cloudez-claude-plugin
 /plugin install cloudez@cloudez
 ```
 
@@ -115,12 +115,13 @@ Com o plugin ativo:
   conduz o usuário até ele: pergunta se já tem conta, aponta a página certa do
   painel dele (ou o cadastro, se for o caso) e captura o token sem que ele passe
   pela conversa;
-- `/cloudez:hire-cloud` — contrata uma cloud paga na Cloudez, sempre pelo
+- `/cloudez:hire-cloud` — contrata uma cloud nova na Cloudez. Pedido por
+  **teste grátis** é provisionado pelas tools (`cloudez_get_trial_plan` e
+  `cloudez_setup_trial_cloud`), o mesmo caminho do cadastro: o trial é um por
+  conta, e quem recusa o segundo é a Cloudez. Pedido **pago** é sempre pelo
   painel (`<panel_host>/clouds/create`) — não existe tool para pagamento, de
-  propósito. **Nunca oferece o teste grátis**: o trial só existe
-  automaticamente no cadastro de conta nova, dentro do `/cloudez:login`. O
-  `/cloudez:setup` delega para este comando quando a conta não tem onde criar
-  um site, em vez de duplicar o procedimento;
+  propósito. O `/cloudez:setup` delega para este comando quando a conta não tem
+  onde criar um site, em vez de duplicar o procedimento;
 - `/cloudez:setup <domain> <environment>` — cria o `.cloudez.yaml` do projeto, se
   ainda não existir. Os dois argumentos são obrigatórios: o domínio identifica o
   site, o environment dá nome ao bloco gerado. Faltando algum, o comando pergunta.
@@ -380,22 +381,36 @@ Em linguagem natural: *"volta a versão anterior"*, *"desfaz o último deploy"*,
       trial nenhum) não tem onde criar o site, ou quando o usuário prefere uma
       cloud nova a uma das existentes — delegando para `/cloudez:hire-cloud`
       em vez de duplicar o procedimento
-- [x] `/cloudez:hire-cloud`, comando próprio para contratar uma cloud paga
-      fora do `/cloudez:setup` — quem pede "quero contratar uma cloud" em
-      linguagem natural, sem estar no meio da criação de um site, caía antes
-      numa conversa improvisada, sem procedimento nenhum por trás. Não existe
-      tool para contratar: é dinheiro de verdade e escolha de plano, então o
+- [x] `/cloudez:hire-cloud`, comando próprio para contratar uma cloud fora do
+      `/cloudez:setup` — quem pede "quero contratar uma cloud" em linguagem
+      natural, sem estar no meio da criação de um site, caía antes numa
+      conversa improvisada, sem procedimento nenhum por trás. Para contratação
+      paga não existe tool: é dinheiro de verdade e escolha de plano, então o
       comando manda o usuário para `https://<panel_host>/clouds/create` e
       espera ele confirmar — não há polling — antes de comparar
-      `cloudez_list_clouds` de antes e depois para achar a cloud nova. **Nunca
-      oferece o teste grátis**: o trial só existe automaticamente no cadastro
-      de conta nova. **Não foi exercitado contra a API real**
+      `cloudez_list_clouds` de antes e depois para achar a cloud nova. **Não
+      foi exercitado contra a API real**
+- [x] ~~O teste grátis só existia no cadastro de conta nova: quem já tinha
+      conta e pedia um cloud de teste era recusado pelo `/cloudez:hire-cloud`,
+      que o mandava para a contratação paga.~~ **Fechada**: o pedido por teste
+      numa conta existente segue o mesmo caminho do cadastro
+      (`cloudez_get_trial_plan` e `cloudez_setup_trial_cloud`), e o limite de
+      um trial por conta continua sendo decidido pela Cloudez, que recusa o
+      segundo com `trial_already_exists` — o comando não tenta deduzir quem
+      ainda tem direito, porque `cloudez_list_clouds` erra nos dois sentidos:
+      uma cloud paga não consome o trial, e uma conta sem cloud nenhuma pode
+      já tê-lo gasto
 - [x] `panel_host` lembrado por máquina, em `~/.cloudez/panel_host` (irmão do
-      `token`, mas sem `chmod 0600` — não é segredo). `cloudez_remember_panel_host`
-      grava, `cloudez_auth_status` devolve o que estiver gravado. Antes disso,
-      todo comando que precisava do painel perguntava de novo, mesmo quando o
-      usuário já tinha informado um minutos antes, na mesma conversa ou numa
-      anterior
+      `token`, mas sem `chmod 0600` — não é segredo). Antes disso, todo comando
+      que precisava do painel perguntava de novo, mesmo quando o usuário já
+      tinha informado um minutos antes, na mesma conversa ou numa anterior.
+      A gravação é efeito colateral de `cloudez_panel_info`, não uma tool à
+      parte: começou como uma tool separada (`cloudez_remember_panel_host`),
+      chamada explicitamente por quem confirmava o painel, mas na prática esse
+      passo — sem efeito visível na resposta do turno — ficava de fora com
+      frequência demais, mesmo com instrução explícita para não pular. Como
+      `cloudez_panel_info` já é chamada sempre que há um painel para confirmar,
+      dobrar a gravação nela elimina a chance de esquecê-la
 - [x] `cloudez_auth_status` para de ser narrado ao usuário quando
       `authenticated: true` — "seu token foi verificado, veio do arquivo tal"
       é ruído quando checar login não é o pedido dele. Contrato explícito
@@ -435,11 +450,12 @@ O domínio varia: a Cloudez é **white-label**, e cada revenda tem o seu —
 o domínio em vez de presumir um, e confere com `cloudez_panel_info` antes de
 mandar o usuário para lá.
 
-Confirmado, o `panel_host` fica lembrado em **`~/.cloudez/panel_host`** — irmão
-do `token`, mas sem `chmod 0600`: não é segredo, só o endereço do painel.
-`cloudez_auth_status` devolve o que estiver gravado, e todo comando que
-precisa do painel confere ali antes de perguntar de novo. `CLOUDEZ_PANEL_HOST_FILE`
-muda o caminho, pelo mesmo motivo do `CLOUDEZ_TOKEN_FILE`.
+Confirmado, o `cloudez_panel_info` já grava o `panel_host` sozinho em
+**`~/.cloudez/panel_host`** — irmão do `token`, mas sem `chmod 0600`: não é
+segredo, só o endereço do painel. `cloudez_auth_status` devolve o que estiver
+gravado, e todo comando que precisa do painel confere ali antes de perguntar
+de novo. `CLOUDEZ_PANEL_HOST_FILE` muda o caminho, pelo mesmo motivo do
+`CLOUDEZ_TOKEN_FILE`.
 
 **Quem não tem conta cria pelo próprio Claude, sempre na Configr.** O
 `/cloudez:login` não pergunta por revenda — pergunta nome, e-mail e telefone,

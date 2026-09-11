@@ -1,6 +1,6 @@
 ---
-description: Contrata uma cloud (servidor) nova na Cloudez, sempre pelo painel — não há tool de pagamento. Use quando o usuário pedir para contratar, comprar ou adicionar uma cloud/servidor, fora do cadastro de conta, onde o trial já resolve isso sozinho.
-allowed-tools: mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_remember_panel_host, mcp__cloudez__cloudez_list_clouds, AskUserQuestion
+description: Contrata uma cloud (servidor) nova na Cloudez — o teste grátis, quando a conta ainda tem direito a ele, ou um plano pago pelo painel, já que não há tool de pagamento. Use quando o usuário pedir para contratar, comprar ou adicionar uma cloud/servidor fora do cadastro de conta.
+allowed-tools: mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_get_trial_plan, mcp__cloudez__cloudez_setup_trial_cloud, mcp__cloudez__cloudez_list_clouds, AskUserQuestion
 ---
 
 ## 0. Autenticação, antes de qualquer coisa
@@ -30,29 +30,57 @@ mais de uma" no passo 3. Não presuma nenhum painel: a Cloudez é white-label,
 cada revenda tem o seu domínio — `cloud.configr.com` é o da Configr, não é
 "o" painel.
 
+Peça só a pergunta em si. Não mencione `panel_host` nem diga que nada foi
+salvo ainda — isso é estado interno, não faz parte da pergunta.
+
 Confirme com `cloudez_panel_info`. Se vier `panel_not_found`, o endereço
 está errado — diga isso e peça de novo, em vez de seguir com um painel que
-não existe.
+não existe. Confirmado com sucesso, o painel já fica gravado nesta máquina
+sozinho — não é preciso chamar mais nada para isso.
 
-**Confirmado, grave o painel antes de seguir — não pule este passo, mesmo
-sem efeito visível na resposta de agora:**
+## 2. Teste grátis, quando é isso que ele pediu
 
-```
-cloudez_remember_panel_host(panel_host: "<panel_host>")
-```
+**Só entre aqui se o pedido foi por teste, trial ou cloud grátis.** Pedido sem
+adjetivo ("quero contratar uma cloud") é contratação paga: siga para o passo 3
+sem oferecer o teste — oferecer grátis a quem se dispôs a pagar muda o que ele
+pediu.
 
-Sem essa chamada, a próxima conversa — aqui ou em qualquer outro comando
-deste plugin — pergunta o painel de novo, como se nada tivesse sido salvo.
+O teste é **um por conta**, e quem decide se ainda há direito a ele é a
+Cloudez, não este comando. Não tente adivinhar pelo que a conta já tem: uma
+cloud paga não consome o trial, e uma conta sem cloud nenhuma pode já tê-lo
+gasto num cloud que foi removido.
 
-## 2. Sem teste grátis aqui
+Chame `cloudez_get_trial_plan` com o `panel_host` do passo 1.
 
-Este comando é sempre contratação **paga**. Se o usuário perguntar por teste
-grátis, ou parecer esperar que este fluxo ofereça um: não ofereça, e não
-existe caminho manual para ele pelo painel. O único jeito de ganhar o trial é
-o `/cloudez:login`, no cadastro de uma conta nova — automático, uma vez, e
-não é algo que se repete nem se contrata depois.
+- **Sem `trial_ia_plan_id`** — esta revenda não tem plano de teste. Diga que
+  aqui não existe teste grátis e siga para o passo 3, se ele quiser contratar
+  pago.
 
-## 3. Contratar
+Com o id, guarde os `id` que `cloudez_list_clouds()` devolve agora — é o
+retrato de antes, e aqui ele serve para duas coisas: achar a cloud nova depois
+e não confundir com uma que já existia. Então chame `cloudez_setup_trial_cloud`
+passando o `trial_ia_plan_id` que veio.
+
+**Não repita a chamada se ela falhar.** Não é idempotente: se o
+provisionamento tiver ocorrido apesar do erro, uma segunda chamada cria uma
+SEGUNDA cloud.
+
+- **`trial_already_exists`** — a conta já usou o teste dela. Diga isso e
+  ofereça a contratação paga do passo 3; não é erro, é o limite de um por
+  conta;
+- **`cloud_limit_reached`** — limite de clouds da conta. Não se resolve por
+  aqui: diga para ele contatar o suporte da Cloudez;
+- **`cloud_setup_unconfirmed`** — a chamada falhou depois de enviada, e a
+  cloud pode ter sido criada mesmo assim. Chame `cloudez_list_clouds` e
+  compare com o retrato de antes: apareceu uma nova, trate como sucesso; não
+  apareceu, diga que o teste não pôde ser provisionado e mande para o suporte
+  — **não** mande para o painel, que é contratação paga, não o teste.
+
+Deu certo, chame `cloudez_list_clouds()` e diga qual é a cloud nova (`name`,
+`fqdn`). Se o pedido original envolvia um site, ofereça seguir com
+`/cloudez:setup` usando ela.
+
+## 3. Contratar pago
 
 Guarde os `id` que `cloudez_list_clouds()` devolve agora — é o retrato de
 antes, contra o qual vai comparar depois de o usuário confirmar.
