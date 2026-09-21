@@ -27049,6 +27049,10 @@ function authTokenPath() {
 function authUserPath() {
   return process.env.CLOUDEZ_API_AUTH_USER_PATH || "/auth/user/";
 }
+function userPath(id) {
+  const template = process.env.CLOUDEZ_API_USER_PATH || "/v3/user/{id}/";
+  return template.replace("{id}", encodeURIComponent(String(id)));
+}
 function passwordResetPath() {
   return process.env.CLOUDEZ_API_PASSWORD_RESET_PATH || "/auth/password/reset/";
 }
@@ -29405,20 +29409,49 @@ async function listClouds() {
 // src/panel-host-store.ts
 import { mkdir as mkdir2, readFile as readFile4, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname4 } from "node:path";
-async function rememberedPanelHost() {
+async function rememberedPanelHosts() {
   try {
-    const contents = (await readFile4(panelHostFile(), "utf8")).trim();
-    return contents || null;
+    const [host, alt] = (await readFile4(panelHostFile(), "utf8")).split("\n").map((linha) => linha.trim());
+    if (!host) return null;
+    return { panel_host: host, ...alt ? { panel_host_alt: alt } : {} };
   } catch {
     return null;
   }
 }
-async function rememberPanelHost(entrada) {
+async function rememberPanelHost(entrada, alternativo) {
   const host = normalizePanelHost(entrada);
+  const alt = alternativo ? normalizePanelHost(alternativo) : void 0;
   const arquivo = panelHostFile();
   await mkdir2(dirname4(arquivo), { recursive: true, mode: 448 });
-  await writeFile2(arquivo, host + "\n");
+  await writeFile2(arquivo, alt && alt !== host ? `${host}
+${alt}
+` : `${host}
+`);
   return host;
+}
+async function accountPanelHosts() {
+  try {
+    const conta = await apiGet(authUserPath());
+    if (typeof conta?.id !== "number" && typeof conta?.id !== "string") return null;
+    const usuario = await apiGet(userPath(conta.id));
+    const dominios = (Array.isArray(usuario?.company_domains) ? usuario.company_domains : []).map((d) => typeof d === "string" ? normalizeHost(d) : void 0).filter((d) => d !== void 0);
+    const [host] = dominios;
+    if (!host) return null;
+    const alt = dominios.find((d) => d !== host && d.endsWith(".cloudez.app"));
+    return { panel_host: host, ...alt ? { panel_host_alt: alt } : {} };
+  } catch {
+    return null;
+  }
+}
+async function resolvePanelHosts() {
+  const lembrado = await rememberedPanelHosts();
+  const daConta = await accountPanelHosts();
+  if (!daConta) return lembrado;
+  if (daConta.panel_host !== lembrado?.panel_host || daConta.panel_host_alt !== lembrado?.panel_host_alt) {
+    await rememberPanelHost(daConta.panel_host, daConta.panel_host_alt).catch(() => {
+    });
+  }
+  return daConta;
 }
 
 // src/index.ts
@@ -29430,7 +29463,7 @@ server.registerTool(
   "cloudez_auth_status",
   {
     title: "Estado da autentica\xE7\xE3o na Cloudez",
-    description: "Informa se h\xE1 um token da Cloudez utiliz\xE1vel nesta m\xE1quina, e devolve tamb\xE9m o panel_host lembrado, se cloudez_panel_info j\xE1 tiver confirmado um nesta m\xE1quina antes \u2014 n\xE3o pergunte o painel ao usu\xE1rio antes de conferir aqui. Chame antes da primeira opera\xE7\xE3o que fale com a Cloudez numa sess\xE3o, e sempre que outra tool falhar com not_authenticated ou token_invalid, para saber se o problema \xE9 credencial. N\xE3o recebe nem devolve o token: se n\xE3o houver autentica\xE7\xE3o, o caminho \xE9 o `/cloudez:login`, que cadastra pelas tools quem n\xE3o tem conta \u2014 sem nada para rodar no terminal \u2014 e leva ao painel quem j\xE1 tem. `authenticated: true` N\xC3O \xE9 algo para relatar ao usu\xE1rio \u2014 \xE9 s\xF3 o sinal para seguir com o que ele pediu, em sil\xEAncio; s\xF3 vale falar sobre autentica\xE7\xE3o quando ela FALTAR, ou quando checar o login for o pr\xF3prio pedido dele. Nunca pe\xE7a o token na conversa.",
+    description: "Informa se h\xE1 um token da Cloudez utiliz\xE1vel nesta m\xE1quina, e devolve tamb\xE9m o panel_host: o da revenda da conta, quando o token \xE9 v\xE1lido, ou o que cloudez_panel_info j\xE1 confirmou nesta m\xE1quina antes. Quando vier panel_host_alt (o endere\xE7o *.cloudez.app da revenda), mostre ao usu\xE1rio os links nos dois endere\xE7os: h\xE1 parceiro que n\xE3o aponta o DNS do principal. N\xE3o pergunte o painel ao usu\xE1rio antes de conferir aqui. Chame antes da primeira opera\xE7\xE3o que fale com a Cloudez numa sess\xE3o, e sempre que outra tool falhar com not_authenticated ou token_invalid, para saber se o problema \xE9 credencial. N\xE3o recebe nem devolve o token: se n\xE3o houver autentica\xE7\xE3o, o caminho \xE9 o `/cloudez:login`, que cadastra pelas tools quem n\xE3o tem conta \u2014 sem nada para rodar no terminal \u2014 e leva ao painel quem j\xE1 tem. `authenticated: true` N\xC3O \xE9 algo para relatar ao usu\xE1rio \u2014 \xE9 s\xF3 o sinal para seguir com o que ele pediu, em sil\xEAncio; s\xF3 vale falar sobre autentica\xE7\xE3o quando ela FALTAR, ou quando checar o login for o pr\xF3prio pedido dele. Nunca pe\xE7a o token na conversa.",
     inputSchema: object({}),
     // Sem efeito colateral, então pode entrar no allowlist do usuário e nunca gerar prompt.
     annotations: { readOnlyHint: true, openWorldHint: true }
@@ -29439,25 +29472,26 @@ server.registerTool(
     try {
       const token = await resolveToken();
       const source = await tokenSource();
-      const panelHost = await rememberedPanelHost();
       if (!token) {
+        const painel2 = await rememberedPanelHosts();
         return okResult({
           authenticated: false,
           source,
           token_file: tokenFile(),
           verified: false,
-          ...panelHost ? { panel_host: panelHost } : {},
+          ...painel2,
           ...loginHint(),
           warning: "N\xE3o pe\xE7a o token na conversa: colado aqui, ele fica no transcript da sess\xE3o."
         });
       }
       const verdict = await verifyToken(token);
+      const painel = verdict === "valid" ? await resolvePanelHosts() : await rememberedPanelHosts();
       return okResult({
         authenticated: verdict !== "invalid",
         source,
         token_file: tokenFile(),
         verified: verdict === "valid",
-        ...panelHost ? { panel_host: panelHost } : {},
+        ...painel,
         // Recusado dá no mesmo que não ter nenhum: a instrução para o usuário é a mesma.
         ...verdict === "invalid" && {
           ...loginHint(),
@@ -29925,7 +29959,10 @@ server.registerTool(
   },
   async ({ panel_host, full_name, email: email3, phone }) => {
     try {
-      return okResult({ ...await signup({ panel_host, full_name, email: email3, phone }) });
+      const conta = await signup({ panel_host, full_name, email: email3, phone });
+      await rememberPanelHost(panel_host).catch(() => {
+      });
+      return okResult({ ...conta });
     } catch (err) {
       return errorResult(err);
     }

@@ -64,6 +64,16 @@ Gere o token e copie (Ctrl+C / Cmd+C).
 Me avise quando tiver copiado o token.
 ```
 
+Se `cloudez_auth_status` trouxe `panel_host_alt`, a linha do link vira duas:
+
+```
+Abra: https://<panel_host>/account?tab=token
+(se não abrir, use https://<panel_host_alt>/account?tab=token)
+```
+
+O alternativo é o endereço `*.cloudez.app` da revenda: há parceiro que não
+aponta o DNS do domínio principal, e aí só ele abre o painel.
+
 **Mande só isso.** Não repita de volta qual painel ele escolheu — ele acabou de
 dizer —, e não antecipe telas que ele talvez nem veja. Se o painel pedir alguma
 coisa antes do token, como validar o telefone, ele conta e você responde na hora.

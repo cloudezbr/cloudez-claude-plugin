@@ -18,8 +18,8 @@ usuário só quer contratar a cloud, não um relatório de credencial.
 ## 1. O painel
 
 Se a resposta do passo 0 já trouxe `panel_host`, use-o direto — **não
-pergunte de novo.** É o mesmo painel que outro comando já confirmou nesta
-máquina antes.
+pergunte de novo.** É o painel da revenda da própria conta, ou o que outro
+comando já confirmou nesta máquina.
 
 Sem `panel_host` na resposta, pergunte o endereço que o usuário usa para
 entrar na Cloudez, **em texto, não com `AskUserQuestion`** — ela exige de 2 a
@@ -91,6 +91,11 @@ Mande:
 Abra: https://<panel_host>/clouds/create
 Contrate o plano que preferir. Quando terminar, me avise.
 ```
+
+Se o passo 0 trouxe `panel_host_alt`, mostre também o link nele, logo abaixo
+do primeiro: `(se não abrir, use https://<panel_host_alt>/clouds/create)`. É o
+endereço `*.cloudez.app` da revenda, e há parceiro que não aponta o DNS do
+domínio principal.
 
 **Espere a confirmação dele antes de conferir.** Contratar e provisionar
 levam um tempo que este comando não controla — não há como saber daqui
