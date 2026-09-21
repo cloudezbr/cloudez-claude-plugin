@@ -411,6 +411,13 @@ Em linguagem natural: *"volta a versão anterior"*, *"desfaz o último deploy"*,
       frequência demais, mesmo com instrução explícita para não pular. Como
       `cloudez_panel_info` já é chamada sempre que há um painel para confirmar,
       dobrar a gravação nela elimina a chance de esquecê-la
+- [x] `panel_host` lido da conta: com o token válido, `cloudez_auth_status`
+      pega o `app_domains[0]` da revenda no `company_domains` de
+      `/v3/user/{id}/`, e também o `*.cloudez.app`, quando é outro, e grava os
+      dois. Os links do painel saem nos dois endereços, porque há parceiro que
+      não aponta o DNS do principal. Antes disso, quem autenticava sem passar por `cloudez_panel_info`
+      ouvia a pergunta do painel mesmo logado, inclusive logo depois de criar
+      a conta pelo `cloudez_signup`, que agora também grava o painel
 - [x] `cloudez_auth_status` para de ser narrado ao usuário quando
       `authenticated: true` — "seu token foi verificado, veio do arquivo tal"
       é ruído quando checar login não é o pedido dele. Contrato explícito
@@ -452,9 +459,11 @@ mandar o usuário para lá.
 
 Confirmado, o `cloudez_panel_info` já grava o `panel_host` sozinho em
 **`~/.cloudez/panel_host`** — irmão do `token`, mas sem `chmod 0600`: não é
-segredo, só o endereço do painel. `cloudez_auth_status` devolve o que estiver
-gravado, e todo comando que precisa do painel confere ali antes de perguntar
-de novo. `CLOUDEZ_PANEL_HOST_FILE` muda o caminho, pelo mesmo motivo do
+segredo, só o endereço do painel. O `cloudez_signup` grava o mesmo arquivo.
+Com o token válido, `cloudez_auth_status` devolve o painel da própria conta
+(`company_domains` de `/v3/user/{id}/`) e atualiza o arquivo; sem isso, devolve o que
+estiver gravado. Todo comando que precisa do painel confere ali antes de
+perguntar. `CLOUDEZ_PANEL_HOST_FILE` muda o caminho, pelo mesmo motivo do
 `CLOUDEZ_TOKEN_FILE`.
 
 **Quem não tem conta cria pelo próprio Claude, sempre na Configr.** O

@@ -23,7 +23,7 @@ interrompida no pior lugar.
 **Execute o comando `/cloudez:hire-cloud`.**
 
 Toda a lógica vive em `commands/hire-cloud.md`: o painel — perguntado só
-quando ainda não há um lembrado nesta máquina —, quando o pedido é de teste
+quando nem a conta nem esta máquina o informam —, quando o pedido é de teste
 grátis e quando é contratação paga, e o antes/depois de `cloudez_list_clouds`
 para achar a cloud nova. Se precisar consultar o procedimento, leia esse arquivo;
 não reconstrua os passos de memória, e não os duplique aqui.

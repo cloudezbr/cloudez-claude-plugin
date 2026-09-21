@@ -121,7 +121,8 @@ Não recebe nem devolve o token — veja a seção 5.
   "source": "file",                  // "env" | "file" | "none"
   "token_file": "/home/ana/.cloudez/token",
   "verified": true,                  // false quando a API não pôde confirmar
-  "panel_host": "cloud.configr.com"  // ausente se cloudez_panel_info nunca confirmou um aqui (§3.15)
+  "panel_host": "cloud.configr.com",       // o da conta, ou o gravado nesta máquina; ausente se não houver nenhum
+  "panel_host_alt": "configr.cloudez.app"  // o *.cloudez.app da revenda; ausente se não houver outro
 }
 ```
 
@@ -139,11 +140,26 @@ foi escrita — que é `/cloudez:login` sendo o próprio pedido do usuário. Con
 explícito agora: falar sobre autenticação só quando ela FALTAR (então o caminho
 é o `/cloudez:login`), ou quando checar login for o pedido em si.
 
-`panel_host`, quando presente, é o que `cloudez_panel_info` (§3.15) confirmou
-numa chamada anterior — de QUALQUER comando, não só do que gravou; a gravação é
-efeito colateral daquela tool, não uma tool à parte. Quem chama confere este
-campo antes de perguntar o painel ao usuário: um painel já confirmado nesta
-máquina não precisa ser perguntado de novo a cada conversa.
+`panel_host` tem duas origens, nesta ordem:
+
+1. **A conta.** Com o token válido (`verified: true`), a tool pega o `id` em
+   `GET /auth/user/` e lê o `company_domains` em `GET /v3/user/{id}/`. O
+   `panel_host` é sempre o primeiro da lista (o `app_domains[0]` da API), e o
+   `panel_host_alt` é o `*.cloudez.app` da revenda, quando é outro. Os dois
+   ficam gravados em `~/.cloudez/panel_host`. A conta vale mais
+   que o arquivo porque o token pode ter trocado de revenda desde a última
+   gravação.
+2. **O arquivo local.** Sem token válido, com a API fora ou com uma API que
+   ainda não devolve `company_domains`, vale o que `cloudez_panel_info` (§3.15) ou
+   `cloudez_signup` (§3.16) gravaram antes, em qualquer comando.
+
+Quem chama confere este campo antes de perguntar o painel ao usuário. A
+pergunta só sobra quando nenhuma das duas origens responde.
+
+**Com `panel_host_alt` presente, todo link do painel mostrado ao usuário vai
+nos dois endereços.** Há parceiro que não aponta o DNS do `app_domains[0]` e
+usa só o endereço temporário `*.cloudez.app`; mostrar só o principal mandaria
+esse usuário para uma página que não abre.
 
 Quando não há token — ou quando a Cloudez o recusou —, o retorno traz **os
 comandos prontos desta máquina**, e não só um conselho genérico:
@@ -1179,6 +1195,10 @@ sobrescreve, nunca acumula — um `panel_host` novo (o usuário mudou de revenda
 ou corrigiu o que informou antes) simplesmente substitui o anterior. Não tem
 relação com autenticação: o token continua exigindo o fluxo do
 `/cloudez:login` inteiro; isto só evita repetir a pergunta do painel.
+`cloudez_signup` grava o mesmo arquivo ao criar a conta, e
+`cloudez_auth_status` o reescreve com o painel da conta (§3.1). A primeira
+linha é o `panel_host`; a segunda, quando existe, o `panel_host_alt`, que só
+a conta informa.
 
 ---
 

@@ -155,8 +155,8 @@ a checagem de tipo do passo 5 passa direto.
 
 Siga o procedimento de `/cloudez:hire-cloud` — é o mesmo comando que atende
 quem pede para contratar uma cloud fora deste fluxo, e o procedimento não é
-duplicado aqui: ele já cuida do painel (perguntando só se ainda não houver um
-lembrado nesta máquina), do aviso de que é sempre contratação paga, e do
+duplicado aqui: ele já cuida do painel (perguntando só se nem a conta nem esta
+máquina o informarem), do aviso de que é sempre contratação paga, e do
 antes/depois de `cloudez_list_clouds` para achar a cloud nova.
 
 Com a cloud nova identificada, volte para `cloudez_create_site`, acima, usando
