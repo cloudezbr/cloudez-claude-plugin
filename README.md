@@ -302,6 +302,27 @@ Em linguagem natural: *"volta a versão anterior"*, *"desfaz o último deploy"*,
   `<root>/.cloudez/deploys/`, com o commit e o hash do que subiu. Serve para
   descobrir o que está no ar mesmo quando quem publicou foi outra pessoa.
 
+## HTTPS: não há nada para ativar
+
+O certificado é emitido pela Cloudez sozinha. Assim que o domínio passa a apontar
+para ela, o pedido é enfileirado; e uma rotina periódica repete o pedido enquanto
+um site hospedado não tiver certificado. Quando a emissão termina, o HTTPS é
+ligado no site sem ninguém apertar nada. **Não existe botão de ativar, nem no
+painel nem aqui** — se o assistente disser que falta ativar, ele está inventando.
+
+A emissão é assíncrona e leva alguns minutos. Nesse intervalo o site responde por
+`http`, e é por isso que a verificação de saúde do deploy tenta `https` e cai
+para `http` antes de dizer que algo está errado: site sem certificado **ainda**
+não é site quebrado.
+
+Tem uma tool para o caso em que o DNS já aponta há bastante tempo e o site
+continua sem HTTPS — peça em linguagem natural (*"pede o certificado do
+meusite.com.br"*). Ela não faz parte de nenhum comando de propósito: pedir antes
+de o domínio apontar registra um pedido que não entra na fila e, enquanto ele
+estiver lá, impede a Cloudez de pedir sozinha. Chamada de novo depois que o DNS
+apontar, ela reenfileira esse pedido, que é o que destrava o caso. O porquê
+completo está no apêndice B de [`docs/mcp-tool-contract.md`](docs/mcp-tool-contract.md).
+
 ## Estado atual
 
 - [x] Contrato das tools MCP (`docs/mcp-tool-contract.md`)
@@ -425,6 +446,20 @@ Em linguagem natural: *"volta a versão anterior"*, *"desfaz o último deploy"*,
       ela faltar, ou quando checar login for o próprio pedido (o
       `/cloudez:login` continua narrando, porque aí é exatamente isso que o
       usuário perguntou)
+- [x] HTTPS documentado como automático, e `cloudez_request_certificate` para o
+      pedido explícito. O defeito era de comportamento: sem nenhum passo
+      mandando, o assistente dizia ao usuário que faltava "ativar o HTTPS no
+      painel" depois de provisionar o site — passo que não existe. O fato agora
+      está escrito onde o modelo lê (descrição das tools, contrato §3.23 e
+      apêndice B, `commands/setup.md` e `commands/deploy.md`), e o
+      `cloudez_get_site` devolve o estado do certificado. A tool lê antes de
+      escrever porque as duas escritas não são intercambiáveis: com um pedido
+      pendente no lugar, um POST na coleção não enfileira emissão nenhuma — e
+      um pendente parado também impede a Cloudez de pedir sozinha. **Não foi
+      exercitado contra a API real:** as rotas, o `provider` e o gatilho
+      automático foram lidos no código da API (`CertificateViewSet` v3,
+      `CertificateCreateSerializer`, `auto_start_https`, `ask_certificates`), e
+      a suíte cobre os caminhos contra uma API falsa
 - [ ] O rollback de container depende de estado LOCAL. O `cloudez_rollback` é
       chaveado por domínio + root (estado do servidor), mas o `compose_build` e o
       `compose_up` são chaveados por `deploy_id` (estado em `~/.cloudez/state/`).

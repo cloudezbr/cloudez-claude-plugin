@@ -4,7 +4,7 @@ Especificação da interface que o servidor MCP (repositório separado) deve exp
 para este plugin. Este documento é a fonte da verdade do contrato: o plugin é
 escrito contra ele, e o servidor MCP o implementa.
 
-Status: **implementado**. As vinte e uma tools descritas existem no servidor e
+Status: **implementado**. As vinte e duas tools descritas existem no servidor e
 são chamadas pelos comandos do plugin; o que segue em aberto está na seção 7.
 
 Boa parte do que está escrito aqui foi aprendido apanhando — endpoints
@@ -372,6 +372,7 @@ devolve os candidatos com o domínio de cada um, e o `/cloudez:setup` pergunta.
     "app_root_path": "claude/current",
     "custom_port": "3000",
     "temporary_address": "meusite-com-br.srv-12.cloudez.io",
+    "certificate": { "status": "valid", "active": true },
     "ssh": {
       "host": "srv-12.cloudez.io",
       "port": 22,
@@ -384,6 +385,13 @@ devolve os candidatos com o domínio de cada um, e o `/cloudez:setup` pergunta.
 
 > Nenhuma credencial no retorno. A chave SSH vive no ambiente do usuário
 > (`~/.ssh/`), não passa pelo MCP nem pelo contexto do modelo.
+
+**`certificate` é o estado do HTTPS, e nenhum dos seus valores é tarefa do
+usuário.** `valid` com `active: true` é HTTPS no ar; `pending` é emissão em
+andamento; a ausência do campo é site sem certificado ainda. A Cloudez pede o
+certificado sozinha — ver `cloudez_request_certificate` (§3.23) e o apêndice
+[A-HTTPS](#a-https). Vem do campo `certificate` do recurso, que a API já devolve
+sem os revogados.
 
 **O destino do ssh não vem de `values`.** Ele mora em dois objetos do recurso:
 
@@ -1391,7 +1399,7 @@ tê-lo gasto.
 
 Pedido de contratação **paga**, e ausência de `trial_ia_plan_id` (revenda sem
 plano trial configurado), levam ao mesmo lugar — não há tool: a contratação é
-manual, em `<panel_host>/clouds/create` (ver §3.23).
+manual, em `<panel_host>/clouds/create` (ver §3.24).
 
 ---
 
@@ -1464,7 +1472,7 @@ quem chama a rodá-la uma vez por conta — no cadastro, ou no
 só para o cadastro: o limite de um trial por conta é da Cloudez, que recusa o
 segundo com `trial_already_exists` (abaixo). **Não é resposta para
 "contratar um cloud" sem adjetivo**: contratação paga não tem tool, de
-propósito (§3.23) — é dinheiro de verdade e escolha de plano do usuário, não
+propósito (§3.24) — é dinheiro de verdade e escolha de plano do usuário, não
 algo que se decida por ele. A orientação nesse caso é sempre a mesma, manual:
 abrir `<panel_host>/clouds/create` no painel.
 
@@ -1632,7 +1640,67 @@ de `cloudez_get_site`: não haveria como ser escolhido pelo usuário.
 
 ---
 
-### 3.23 Fora do escopo, por enquanto
+### 3.23 `cloudez_request_certificate` — **mutating**
+
+Pede à Cloudez a emissão do certificado HTTPS de um site.
+
+**Esta tool não faz parte de nenhum procedimento**, e é a única do contrato de
+que isso se diz explicitamente. A Cloudez pede o certificado sozinha assim que o
+domínio passa a apontar para ela, e repete o pedido enquanto o site hospedado não
+tiver um. Não existe passo de "ativar o HTTPS" para o usuário executar — ver o
+apêndice [A-HTTPS](#a-https), que registra por que esta frase precisa estar
+escrita. A tool existe para dois casos: o usuário pedir a emissão na hora, e um
+pedido pendente que ficou parado.
+
+```jsonc
+// input
+{ "type": "object", "properties": { "domain": { "type": "string" } },
+  "required": ["domain"], "additionalProperties": false }
+```
+
+```jsonc
+// output
+{
+  "domain": "meusite.com.br",
+  "status": "requested",        // already_active | requeued | requested
+  "certificate_id": 77,
+  "hosted": true,               // o domínio aponta para a Cloudez?
+  "summary": "O certificado foi pedido. A emissão leva alguns minutos.",
+  "note": "…"
+}
+```
+
+**Lê antes de escrever, e o que lê decide qual rota chama.** O estado vem da
+mesma busca por domínio de §3.3, sem chamada extra: o `certificate` que aquela
+tool expõe, e o `is_hosted` do recurso, que fica no payload da API:
+
+| Estado do site | Rota chamada | `status` |
+|---|---|---|
+| certificado válido e ativo | nenhuma | `already_active` |
+| já existe um pedido | `POST /v3/certificate/{id}/requeue/` | `requeued` |
+| nenhum certificado | `POST /v3/certificate/` (`website`, `provider: 4`) | `requested` |
+
+**As duas escritas não são intercambiáveis**, e é por isso que a leitura vem
+antes: com um pedido pendente no lugar, um POST na coleção grava um segundo
+registro e não enfileira emissão nenhuma. Quem reenfileira é o `requeue`.
+
+**`provider: 4` (Cloudez LE) é o único valor que serve.** Com os outros, a API
+grava o registro e ninguém emite — o certificado ficaria pendente para sempre,
+sem erro em lugar nenhum.
+
+**O retorno nunca diz que o HTTPS está no ar.** `requested` e `requeued` dizem
+que o pedido saiu; a emissão é assíncrona, leva minutos e pode falhar. Quem
+confirma é `cloudez_get_site`, no `certificate`.
+
+**Com `hosted: false` a tool pede do mesmo jeito**, e o `summary` e o `note`
+carregam a ressalva: enquanto o domínio não apontar, o pedido fica registrado mas
+não entra na fila. O caminho de volta está no `note` e precisa continuar lá —
+chamar a tool de novo depois que o DNS apontar é o que reenfileira o pendente.
+Ver [A-HTTPS](#a-https).
+
+---
+
+### 3.24 Fora do escopo, por enquanto
 
 Uma tool saiu desta proposta junto com a feature correspondente do plugin. Fica
 registrada para não ser redescoberta do zero:
@@ -1906,3 +1974,42 @@ não tem terminal de controle (`/dev/tty` responde `Device not configured`). Iss
 valeria a pena se a alternativa fosse pior — mas gerar um token no painel resolve
 o mesmo problema sem a senha do usuário passar por lugar nenhum, e o 2FA, que só
 funciona com terminal, deixa de ser um problema.
+
+---
+
+<a id="a-https"></a>
+
+## Apêndice B — o HTTPS é automático, e pedir cedo demais atrasa
+
+Esta entrada existe por um defeito de comportamento, não por precaução: o modelo
+vinha dizendo ao usuário, por conta própria, que faltava "ativar o HTTPS" no
+painel depois de provisionar o site. Não falta, e não há onde ativar. Como
+nenhum comando mandava dizer isso, a correção é o fato ficar escrito onde o
+modelo lê — aqui, nas descrições das tools, e nos comandos que tocam o assunto.
+
+**O que a Cloudez faz sozinha**, confirmado no código da API (`cloudez-api`):
+
+1. Quando o site passa a ser reconhecido como hospedado — ou seja, quando o
+   domínio começa a chegar na Cloudez —, um signal cria um certificado pendente
+   e o enfileira para emissão. O mesmo acontece quando os aliases do site mudam.
+2. Uma rotina periódica varre todo site hospedado que não tenha certificado
+   ativo **nem pendente** e pede de novo. É por isso que um site que ficou sem
+   HTTPS acaba ganhando um sem ninguém mexer.
+3. Quando a emissão termina, a própria API liga o HTTPS no site. O usuário não
+   aciona nada em momento nenhum.
+4. O endereço temporário (`*.cloudezapp.io`, `*.configr.cloud`) é excluído desse
+   pedido de propósito: ele já é coberto por certificado curinga.
+
+**A armadilha, e a razão de a tool reenfileirar em vez de só criar.** O
+enfileiramento só acontece se houver ao menos um domínio já apontado para a
+Cloudez. Um pedido criado antes disso vira um certificado pendente que nunca foi
+para a fila — e, a partir daí, tanto o signal quanto a rotina periódica pulam o
+site, porque os dois se guiam por "já existe um pendente". O efeito é o oposto
+do pretendido: pedir cedo demais **impede** a emissão automática em vez de
+antecipá-la.
+
+Daí as duas decisões de §3.23. A tool pede mesmo com o domínio ainda não
+apontado — é o que o usuário mandou fazer, e recusar seria ela decidir sozinha —,
+mas o retorno carrega a ressalva e o caminho de volta: chamada de novo depois que
+o DNS apontar, ela encontra o pendente e o reenfileira, que é o que tira o site
+do limbo. Um `requeue` trocado por um POST na coleção reabre o defeito inteiro.

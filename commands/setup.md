@@ -143,6 +143,11 @@ prática: criar o site demora, e um timeout não significa que nada foi criado).
 com o mesmo domínio primeiro: se o site já aparecer lá, trate como sucesso e
 siga para o passo 3; só repita a criação se ele realmente não existir.
 
+**Não diga que falta ativar o HTTPS, nem ofereça fazê-lo.** O certificado é
+emitido pela Cloudez sozinha quando o domínio passar a apontar para ela, e não há
+passo de ativação — nem aqui, nem no painel. Se o usuário perguntar, é isso que
+se responde.
+
 Com o site criado, siga para o passo 3 com o `domain` que a tool devolveu. O
 retorno de `cloudez_create_site` tem a MESMA forma do `cloudez_get_site` —
 `stack`, `ssh` ou `ssh_unavailable`, `app_root_path`, `custom_port` —, então

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.19 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.20 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -27017,6 +27017,14 @@ function sitePatchPath(id) {
 function websiteCreatePath() {
   return process.env.CLOUDEZ_API_WEBSITE_CREATE_PATH || "/v3/website/";
 }
+function certificatePath() {
+  return process.env.CLOUDEZ_API_CERTIFICATE_PATH || "/v3/certificate/";
+}
+function certificateRequeuePath(id) {
+  const template = process.env.CLOUDEZ_API_CERTIFICATE_REQUEUE_PATH || "/v3/certificate/{id}/requeue/";
+  return template.replace("{id}", encodeURIComponent(String(id)));
+}
+var CERTIFICATE_PROVIDER_CLOUDEZ_LE = 4;
 function cloudListPath() {
   return process.env.CLOUDEZ_API_CLOUD_LIST_PATH || "/v3/cloud/";
 }
@@ -27354,6 +27362,11 @@ function mapSite(domain, raw) {
   if (port) site.custom_port = port;
   if (temporary) site.temporary_address = temporary;
   if (typeof raw.id === "string" || typeof raw.id === "number") site.id = raw.id;
+  const cert = raw.certificate ?? null;
+  const certStatus = cert ? { 1: "pending", 2: "valid" }[Number(cert.status)] : void 0;
+  if (certStatus === "valid" || certStatus === "pending") {
+    site.certificate = { status: certStatus, active: cert.is_active === true };
+  }
   const cloud = raw.cloud ?? {};
   const user = raw.user ?? {};
   const host = normalize(cloud.fqdn);
@@ -28551,6 +28564,67 @@ ${prova.stderr}`.trim();
   };
 }
 
+// src/certificates.ts
+var STATUS_VALID = 2;
+async function requestCertificate(domain) {
+  const found = await getSite(domain);
+  if (found.match !== "exact") {
+    throw new ToolError("site_not_found", `Nenhum site com o dom\xEDnio exato '${domain}' nesta conta.`, {
+      hint: "O certificado pertence a um site: sem o site n\xE3o h\xE1 para que emiti-lo."
+    });
+  }
+  const raw = found.raw;
+  const website = Number(raw.id);
+  if (!idValido2(website)) {
+    throw new ToolError("upstream_unavailable", "O site n\xE3o trouxe um id utiliz\xE1vel.", {
+      retryable: false,
+      hint: "Sem ele n\xE3o d\xE1 para pedir o certificado. Confira o retorno de cloudez_get_site."
+    });
+  }
+  const hosted = raw.is_hosted === true;
+  const cert = raw.certificate ?? null;
+  if (cert && cert.is_active === true && Number(cert.status) === STATUS_VALID) {
+    return {
+      domain: found.site.domain,
+      status: "already_active",
+      ...idValido2(cert.id) ? { certificate_id: Number(cert.id) } : {},
+      hosted,
+      summary: "O HTTPS j\xE1 est\xE1 ativo neste site \u2014 o certificado est\xE1 emitido e v\xE1lido."
+    };
+  }
+  const resultado = idValido2(cert?.id) ? {
+    domain: found.site.domain,
+    status: "requeued",
+    certificate_id: Number(cert.id),
+    hosted,
+    summary: "O pedido de certificado que j\xE1 existia foi reenfileirado."
+  } : {
+    domain: found.site.domain,
+    status: "requested",
+    hosted,
+    summary: "O certificado foi pedido. A emiss\xE3o leva alguns minutos."
+  };
+  if (resultado.status === "requeued") {
+    await apiPost(certificateRequeuePath(resultado.certificate_id), {});
+  } else {
+    const criado = await apiPost(certificatePath(), {
+      website,
+      // Único provider que a API enfileira para emissão automática. Ver A-HTTPS no contrato.
+      provider: CERTIFICATE_PROVIDER_CLOUDEZ_LE
+    });
+    if (idValido2(criado?.id)) resultado.certificate_id = Number(criado.id);
+  }
+  resultado.note = hosted ? "A emiss\xE3o \xE9 ass\xEDncrona: o HTTPS passa a valer alguns minutos depois, sem mais nenhum passo. N\xE3o diga ao usu\xE1rio que o HTTPS j\xE1 est\xE1 ativo \u2014 confirme depois com cloudez_get_site." : "O dom\xEDnio ainda n\xE3o aponta para a Cloudez, ent\xE3o este pedido fica registrado mas N\xC3O entra na fila de emiss\xE3o \u2014 e, enquanto ele estiver pendente, a Cloudez tamb\xE9m n\xE3o pede sozinha. Depois que o DNS apontar, chame esta tool de novo: ela reenfileira o pedido, que \xE9 o que destrava a emiss\xE3o. Confira o DNS com cloudez_check_dns.";
+  if (!hosted) {
+    resultado.summary = resultado.status === "requeued" ? "O pedido foi reenfileirado, mas s\xF3 ser\xE1 emitido quando o dom\xEDnio apontar para a Cloudez." : "O certificado foi pedido, mas s\xF3 ser\xE1 emitido quando o dom\xEDnio apontar para a Cloudez.";
+  }
+  return resultado;
+}
+function idValido2(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0;
+}
+
 // src/crons.ts
 var CAMPOS = [
   { chave: "minute", nome: "minuto", min: 0, max: 59 },
@@ -28587,7 +28661,7 @@ async function createCron(args) {
     });
   }
   const website = Number(found.raw?.id);
-  if (!idValido2(website)) {
+  if (!idValido3(website)) {
     throw new ToolError("upstream_unavailable", "O site n\xE3o trouxe um id utiliz\xE1vel.", {
       hint: "Sem ele n\xE3o d\xE1 para criar o cron. Confira o retorno de cloudez_get_site."
     });
@@ -28599,16 +28673,16 @@ async function createCron(args) {
     ...tempo
   });
   return {
-    ...idValido2(criado?.id) ? { id: Number(criado.id) } : {},
+    ...idValido3(criado?.id) ? { id: Number(criado.id) } : {},
     website,
     name: args.name,
     command: args.command,
     schedule: CAMPOS.map((c) => tempo[c.chave]).join(" "),
     // A API pode devolver 201 com um corpo que não repete o que foi enviado.
-    raw_ok: idValido2(criado?.id)
+    raw_ok: idValido3(criado?.id)
   };
 }
-function idValido2(v) {
+function idValido3(v) {
   const n = Number(v);
   return Number.isInteger(n) && n > 0;
 }
@@ -29576,6 +29650,24 @@ server.registerTool(
   async ({ domain, app_root_path, custom_port }) => {
     try {
       return okResult({ ...await configureSite(domain, { app_root_path, custom_port }) });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+server.registerTool(
+  "cloudez_request_certificate",
+  {
+    title: "Pedir a emiss\xE3o do certificado HTTPS do site",
+    description: "Pede \xE0 Cloudez a emiss\xE3o do certificado HTTPS de um site. N\xC3O chame por iniciativa pr\xF3pria depois de criar um site ou fazer um deploy: a Cloudez pede o certificado sozinha assim que o dom\xEDnio passa a apontar para ela, e repete o pedido enquanto n\xE3o houver um. N\xE3o existe passo manual de 'ativar o HTTPS' \u2014 nunca diga ao usu\xE1rio que ele precisa ativar. Chame s\xF3 quando o usu\xE1rio pedir a emiss\xE3o explicitamente, ou quando ele relatar site sem HTTPS muito tempo depois de o DNS j\xE1 apontar. N\xE3o escreve nada quando o certificado j\xE1 est\xE1 ativo. Quando um pedido j\xE1 existe, reenfileira esse \u2014 que \xE9 o que destrava um pedido feito antes de o DNS apontar. A emiss\xE3o \xE9 ass\xEDncrona e leva minutos: o retorno diz que o pedido saiu, nunca que o HTTPS j\xE1 est\xE1 valendo. Confirme depois com cloudez_get_site.",
+    inputSchema: object({
+      domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml")
+    }),
+    annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true }
+  },
+  async ({ domain }) => {
+    try {
+      return okResult({ ...await requestCertificate(domain) });
     } catch (err) {
       return errorResult(err);
     }
