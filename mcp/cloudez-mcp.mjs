@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.20 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.21 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -27296,6 +27296,313 @@ function normalizeHost(entrada) {
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(host) ? host : void 0;
 }
 
+// src/frameworks.ts
+var FRAMEWORKS = [
+  "actix-web",
+  "adonisjs",
+  "aiohttp",
+  "alpinejs",
+  "amber",
+  "analog",
+  "angular",
+  "angularjs",
+  "ant-design",
+  "apache-flex",
+  "apollo",
+  "appwrite",
+  "aspnet",
+  "aspnet-core",
+  "aspnet-mvc",
+  "astro",
+  "aurelia",
+  "axum",
+  "backbonejs",
+  "beego",
+  "bigcommerce",
+  "blazor",
+  "blitzjs",
+  "bootstrap",
+  "bottle",
+  "bubble",
+  "buffalo",
+  "bulma",
+  "bun",
+  "cakephp",
+  "catalyst",
+  "chakra-ui",
+  "cherrypy",
+  "chi",
+  "clojure",
+  "clojure-ring",
+  "clojurescript",
+  "codeigniter",
+  "coldfusion",
+  "concrete-cms",
+  "contentful",
+  "cowboy",
+  "cpp",
+  "craft-cms",
+  "crow",
+  "crystal",
+  "csharp",
+  "d3js",
+  "dancer",
+  "dart",
+  "dash",
+  "deno",
+  "dioxus",
+  "directus",
+  "django",
+  "django-cms",
+  "docusaurus",
+  "dojo",
+  "dotnet",
+  "dotnetnuke",
+  "dream",
+  "drogon",
+  "dropwizard",
+  "drupal",
+  "echo",
+  "eleventy",
+  "elixir",
+  "elm",
+  "elysia",
+  "emberjs",
+  "erlang",
+  "express",
+  "fable",
+  "falcon",
+  "fastapi",
+  "fastify",
+  "feathers",
+  "fiber",
+  "firebase",
+  "flask",
+  "flutter",
+  "foundation",
+  "fsharp",
+  "fuelphp",
+  "gatsby",
+  "ghost",
+  "gin",
+  "giraffe",
+  "gleam",
+  "go",
+  "gorilla",
+  "gradio",
+  "grails",
+  "grape",
+  "graphql",
+  "grav",
+  "gridsome",
+  "groovy",
+  "grpc",
+  "grunt",
+  "gulp",
+  "hanami",
+  "handlebars",
+  "hapi",
+  "haskell",
+  "hasura",
+  "helidon",
+  "hexo",
+  "hono",
+  "hotwire",
+  "htmx",
+  "hugo",
+  "ihp",
+  "inferno",
+  "ionic",
+  "iris",
+  "jakarta-ee",
+  "jamstack",
+  "java",
+  "javalin",
+  "javascript",
+  "jekyll",
+  "jester",
+  "jfinal",
+  "jhipster",
+  "joomla",
+  "jquery",
+  "jsf",
+  "jsp",
+  "julia",
+  "kemal",
+  "keystonejs",
+  "kirby",
+  "knockout",
+  "koa",
+  "kohana",
+  "kotlin",
+  "ktor",
+  "laminas",
+  "lapis",
+  "laravel",
+  "leptos",
+  "liferay",
+  "lift",
+  "lit",
+  "litestar",
+  "lithium",
+  "loopback",
+  "lua",
+  "lucee",
+  "lucky",
+  "lumen",
+  "luminus",
+  "lustre",
+  "magento",
+  "marko",
+  "masonite",
+  "material-ui",
+  "materialize",
+  "mediawiki",
+  "mendix",
+  "meteor",
+  "mezzanine",
+  "micronaut",
+  "middleman",
+  "mithril",
+  "mkdocs",
+  "mojolicious",
+  "moodle",
+  "mustache",
+  "nancy",
+  "nestjs",
+  "nextjs",
+  "nicegui",
+  "nim",
+  "nodejs",
+  "nunjucks",
+  "nuxtjs",
+  "objective-c",
+  "ocaml",
+  "october-cms",
+  "opencart",
+  "openresty",
+  "openui5",
+  "orchard-core",
+  "outsystems",
+  "padrino",
+  "payload-cms",
+  "pelican",
+  "perl",
+  "phalcon",
+  "phoenix",
+  "phoenix-liveview",
+  "php",
+  "phpbb",
+  "play-framework",
+  "plone",
+  "pocketbase",
+  "polymer",
+  "preact",
+  "prestashop",
+  "pug",
+  "pyramid",
+  "python",
+  "quarkus",
+  "quart",
+  "qwik",
+  "qwik-city",
+  "r",
+  "r-shiny",
+  "rails",
+  "razor-pages",
+  "react",
+  "react-query",
+  "react-router",
+  "redwoodjs",
+  "reflex",
+  "remix",
+  "rest-api",
+  "restify",
+  "retool",
+  "revel",
+  "riot",
+  "robot-framework",
+  "rocket",
+  "roda",
+  "ruby",
+  "rust",
+  "sails",
+  "salesforce-commerce-cloud",
+  "sanic",
+  "sanity",
+  "scala",
+  "semantic-ui",
+  "servant",
+  "shadcn-ui",
+  "shopify",
+  "silverstripe",
+  "sinatra",
+  "slim",
+  "solidjs",
+  "solidstart",
+  "solidus",
+  "spark-java",
+  "spree",
+  "spring",
+  "spring-boot",
+  "squarespace",
+  "starlette",
+  "statamic",
+  "stencil",
+  "stimulus",
+  "strapi",
+  "streamlit",
+  "struts",
+  "supabase",
+  "svelte",
+  "sveltekit",
+  "swift",
+  "symfony",
+  "tailwindcss",
+  "tide",
+  "tornado",
+  "trpc",
+  "typescript",
+  "typo3",
+  "umbraco",
+  "v",
+  "vaadin",
+  "vapor",
+  "vertx",
+  "vite",
+  "vitepress",
+  "vuejs",
+  "vuepress",
+  "vuetify",
+  "vweb",
+  "wagtail",
+  "warp",
+  "wasp",
+  "web-components",
+  "web2py",
+  "webassembly",
+  "webflow",
+  "webpack",
+  "webpy",
+  "webrtc",
+  "websocket",
+  "wicket",
+  "wisp",
+  "wix",
+  "woocommerce",
+  "wordpress",
+  "wt",
+  "yesod",
+  "yew",
+  "yii",
+  "zend-framework",
+  "zig",
+  "zola"
+];
+function isFrameworkSlug(value) {
+  return typeof value === "string" && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(value);
+}
+
 // src/pagination.ts
 function toList(payload) {
   if (Array.isArray(payload)) return payload;
@@ -27354,12 +27661,14 @@ function mapSite(domain, raw) {
   const release = valueOf(raw, "current_release");
   const appRoot = valueOf(raw, "app_root_path");
   const port = valueOf(raw, "custom_port");
+  const framework = valueOf(raw, "framework");
   const temporary = valueOf(raw, "temporary_address") ?? (typeof raw.temporary_address === "string" && raw.temporary_address.trim() !== "" ? raw.temporary_address.trim() : void 0);
   if (name) site.name = name;
   if (stack) site.stack = stack;
   if (release) site.current_release = release;
   if (appRoot) site.app_root_path = appRoot;
   if (port) site.custom_port = port;
+  if (framework) site.framework = framework;
   if (temporary) site.temporary_address = temporary;
   if (typeof raw.id === "string" || typeof raw.id === "number") site.id = raw.id;
   const cert = raw.certificate ?? null;
@@ -27412,7 +27721,11 @@ async function getSite(domain) {
     candidates: identified.map((entry) => summarize(entry.item, entry.domains))
   };
 }
+var CONFIGURABLE_SLUGS = ["app_root_path", "custom_port", "framework"];
 async function configureSite(domain, desejado) {
+  if (desejado.framework !== void 0 && !isFrameworkSlug(desejado.framework)) {
+    throw invalidFramework(desejado.framework);
+  }
   const before = await getSite(domain);
   if (before.match !== "exact") {
     throw new ToolError("site_not_found", `Nenhum site com o dom\xEDnio '${domain}' nesta conta.`, {
@@ -27422,13 +27735,14 @@ async function configureSite(domain, desejado) {
   const site = before.site;
   const anterior = {
     app_root_path: site.app_root_path,
-    custom_port: site.custom_port
+    custom_port: site.custom_port,
+    framework: site.framework
   };
-  const pendentes = ["app_root_path", "custom_port"].filter(
+  const pendentes = CONFIGURABLE_SLUGS.filter(
     (slug) => desejado[slug] !== void 0 && desejado[slug] !== anterior[slug]
   );
   const resultado = { domain: site.domain, changed: [] };
-  for (const slug of ["app_root_path", "custom_port"]) {
+  for (const slug of CONFIGURABLE_SLUGS) {
     if (desejado[slug] !== void 0) resultado[slug] = desejado[slug];
   }
   if (pendentes.length === 0) return resultado;
@@ -27474,10 +27788,7 @@ async function configureSite(domain, desejado) {
   resultado.changed = [...pendentes];
   for (const slug of pendentes) {
     const antes = anterior[slug];
-    if (antes !== void 0) {
-      if (slug === "app_root_path") resultado.previous_app_root_path = antes;
-      else resultado.previous_custom_port = antes;
-    }
+    if (antes !== void 0) resultado[`previous_${slug}`] = antes;
   }
   return resultado;
 }
@@ -27510,6 +27821,11 @@ async function listSites(query) {
   }
   return result;
 }
+function invalidFramework(framework) {
+  return new ToolError("invalid_argument", `'${framework ?? ""}' n\xE3o \xE9 um slug de framework.`, {
+    hint: "Use o valor da lista que melhor descreve a tecnologia do projeto. Se nenhum servir, escreva o nome dela em slug: min\xFAsculas, n\xFAmeros e h\xEDfen, como 'Next.JS' vira 'nextjs'."
+  });
+}
 async function createSite(args) {
   const domain = normalizeHost(args.domain);
   if (!domain) {
@@ -27523,11 +27839,19 @@ async function createSite(args) {
       hint: "O id vem de cloudez_list_clouds, ou do campo cloud.id de cloudez_setup_trial_cloud."
     });
   }
+  if (!isFrameworkSlug(args.framework)) throw invalidFramework(args.framework);
   let criado;
   try {
     criado = await apiPost(
       websiteCreatePath(),
-      { cloud, type: APP_STACK, values: [{ slug: "domain", value: domain }] },
+      {
+        cloud,
+        type: APP_STACK,
+        values: [
+          { slug: "domain", value: domain },
+          { slug: "framework", value: args.framework }
+        ]
+      },
       websiteCreateTimeoutMs()
     );
   } catch (err) {
@@ -29529,9 +29853,10 @@ async function resolvePanelHosts() {
 }
 
 // src/index.ts
+var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, em slug. Use o valor da lista que melhor a descreve, preferindo o framework \xE0 linguagem (nextjs a nodejs, django a python). Se nenhum servir, escreva o nome dela em slug, como 'Next.JS' vira 'nextjs'. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.1.24"
+  version: "0.2.21"
 });
 server.registerTool(
   "cloudez_auth_status",
@@ -29620,16 +29945,17 @@ server.registerTool(
   "cloudez_create_site",
   {
     title: "Criar um site novo (tipo Claude) numa cloud",
-    description: "Cria um site novo na conta Cloudez, sempre do tipo claude \u2014 n\xE3o pergunte o tipo, \xE9 sempre esse. Chame quando cloudez_get_site n\xE3o encontrar o dom\xEDnio e o usu\xE1rio confirmar que quer criar um site ali, ou logo depois de cloudez_setup_trial_cloud numa conta que ainda n\xE3o tem nenhum site. Use cloudez_list_clouds para escolher o `cloud`, ou o cloud.id que cloudez_setup_trial_cloud devolveu. N\xC3O chame de novo se falhar: o dom\xEDnio pode j\xE1 existir NAQUELA cloud, e repetir sem confirmar o dado com o usu\xE1rio s\xF3 produz o mesmo erro.",
+    description: "Cria um site novo na conta Cloudez, sempre do tipo claude \u2014 n\xE3o pergunte o tipo, \xE9 sempre esse. Chame quando cloudez_get_site n\xE3o encontrar o dom\xEDnio e o usu\xE1rio confirmar que quer criar um site ali, ou logo depois de cloudez_setup_trial_cloud numa conta que ainda n\xE3o tem nenhum site. Use cloudez_list_clouds para escolher o `cloud`, ou o cloud.id que cloudez_setup_trial_cloud devolveu. N\xC3O chame de novo se falhar: o dom\xEDnio pode j\xE1 existir NAQUELA cloud, e repetir sem confirmar o dado com o usu\xE1rio s\xF3 produz o mesmo erro. O `framework` \xE9 escolhido por voc\xEA, lendo o projeto: n\xE3o pergunte ao usu\xE1rio o que o c\xF3digo responde.",
     inputSchema: object({
       cloud: number2().describe("Id da cloud onde criar o site. Vem de cloudez_list_clouds ou cloudez_setup_trial_cloud."),
-      domain: string2().describe("FQDN da aplica\xE7\xE3o, sem protocolo nem caminho. Ex.: meusite.com.br")
+      domain: string2().describe("FQDN da aplica\xE7\xE3o, sem protocolo nem caminho. Ex.: meusite.com.br"),
+      framework: string2().describe(FRAMEWORK_DESCRIPTION)
     }),
     annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: true }
   },
-  async ({ cloud, domain }) => {
+  async ({ cloud, domain, framework }) => {
     try {
-      return okResult({ ...await createSite({ cloud, domain }) });
+      return okResult({ ...await createSite({ cloud, domain, framework }) });
     } catch (err) {
       return errorResult(err);
     }
@@ -29638,18 +29964,19 @@ server.registerTool(
 server.registerTool(
   "cloudez_configure_site",
   {
-    title: "Ajustar document root e porta do site na Cloudez",
-    description: `Ajusta na Cloudez os dois valores de que o deploy deste plugin depende, numa escrita s\xF3: o app_root_path (diret\xF3rio que o servidor web entrega, precisa valer '${EXPECTED_APP_ROOT_PATH}') e a custom_port (porta do host para onde o nginx encaminha '/', precisa valer '${DEFAULT_CUSTOM_PORT}'). Passe s\xF3 o que quiser alterar; o que j\xE1 estiver correto n\xE3o gasta escrita. Chame S\xD3 depois de o usu\xE1rio aceitar explicitamente: mudar o document root altera o que o site serve, e um site apontado para um diret\xF3rio ainda vazio fica fora do ar at\xE9 o primeiro deploy. Se falhar dizendo que o valor n\xE3o mudou, n\xE3o afirme ao usu\xE1rio que a configura\xE7\xE3o foi ajustada, e n\xE3o fa\xE7a deploy contando com isso.`,
+    title: "Ajustar document root, porta e framework do site na Cloudez",
+    description: `Ajusta na Cloudez os dois valores de que o deploy deste plugin depende, numa escrita s\xF3: o app_root_path (diret\xF3rio que o servidor web entrega, precisa valer '${EXPECTED_APP_ROOT_PATH}') e a custom_port (porta do host para onde o nginx encaminha '/', precisa valer '${DEFAULT_CUSTOM_PORT}'). Tamb\xE9m grava o framework, quando o site ainda n\xE3o o tem ou ele n\xE3o descreve mais o projeto. Passe s\xF3 o que quiser alterar; o que j\xE1 estiver correto n\xE3o gasta escrita. Chame S\xD3 depois de o usu\xE1rio aceitar explicitamente: mudar o document root altera o que o site serve, e um site apontado para um diret\xF3rio ainda vazio fica fora do ar at\xE9 o primeiro deploy. Se falhar dizendo que o valor n\xE3o mudou, n\xE3o afirme ao usu\xE1rio que a configura\xE7\xE3o foi ajustada, e n\xE3o fa\xE7a deploy contando com isso.`,
     inputSchema: object({
       domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml"),
       app_root_path: string2().optional().describe(`Novo document root, relativo a ~/<domain>/www. Normalmente '${EXPECTED_APP_ROOT_PATH}'.`),
-      custom_port: string2().optional().describe(`Porta do host que o nginx encaminha para '/'. Neste plugin, sempre '${DEFAULT_CUSTOM_PORT}'.`)
+      custom_port: string2().optional().describe(`Porta do host que o nginx encaminha para '/'. Neste plugin, sempre '${DEFAULT_CUSTOM_PORT}'.`),
+      framework: string2().optional().describe(`${FRAMEWORK_DESCRIPTION} S\xF3 existe no tipo claude.`)
     }),
     annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true }
   },
-  async ({ domain, app_root_path, custom_port }) => {
+  async ({ domain, app_root_path, custom_port, framework }) => {
     try {
-      return okResult({ ...await configureSite(domain, { app_root_path, custom_port }) });
+      return okResult({ ...await configureSite(domain, { app_root_path, custom_port, framework }) });
     } catch (err) {
       return errorResult(err);
     }

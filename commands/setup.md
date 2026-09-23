@@ -126,11 +126,19 @@ Se ele escolher "contratar uma nova", vá para "Contratar uma cloud nova",
 abaixo. Do contrário, com o `id` escolhido:
 
 ```
-cloudez_create_site(cloud: <id>, domain: "<domain do passo 1>")
+cloudez_create_site(cloud: <id>, domain: "<domain do passo 1>", framework: "<slug>")
 ```
 
 **Não pergunte o tipo do site.** É sempre `claude` — o único que este plugin
 publica — e a tool não aceita outro.
+
+**O `framework` é você quem escolhe, lendo o projeto.** Use o valor da lista da
+tool que melhor descreve a tecnologia, preferindo o framework à linguagem:
+`nextjs` e não `nodejs`, `django` e não `python`. O `package.json`, o
+`requirements.txt`, o `composer.json` e afins costumam responder. Se a
+tecnologia não estiver na lista, escreva o nome dela em slug: minúsculas,
+números e hífen, como "Next.JS" vira `nextjs`. Só pergunte ao usuário quando o
+projeto ainda não tiver código que diga a tecnologia.
 
 O domínio é único **por cloud**, não por conta: se vier `invalid_argument`
 dizendo que o domínio já existe, é porque já há um site com ele **naquela
@@ -267,6 +275,11 @@ ainda não ter Compose nenhum — então:
   `custom_port` tem de valer exatamente esse número;
 - **não tem**: use **3000**, que é o que o `/cloudez:compose` vai escrever depois.
 
+**O `framework`** descreve a tecnologia da aplicação e só existe no tipo `claude`.
+Se o `cloudez_get_site` não o trouxer, ou trouxer um que não descreve mais o
+projeto, escolha o valor como no passo 2 e inclua-o na mesma chamada abaixo. Ele
+não muda o que o site serve, então não pede o aviso dos outros dois.
+
 **Se os dois já estiverem certos**, diga que está tudo certo e siga.
 
 **Se algum estiver diferente** — inclusive ausente — explique em termos do que vai
@@ -295,7 +308,8 @@ passaria a ser. Duas coisas que ele precisa saber para decidir:
 cloudez_configure_site(
   domain: "<domain>",
   app_root_path: "claude/current",
-  custom_port: "<3000, ou a porta que o Compose publica>"
+  custom_port: "<3000, ou a porta que o Compose publica>",
+  framework: "<slug, se faltar ou estiver desatualizado>"
 )
 ```
 

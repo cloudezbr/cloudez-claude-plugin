@@ -479,7 +479,8 @@ document root.
   "properties": {
     "domain": { "type": "string" },
     "app_root_path": { "type": "string", "description": "Relativo a ~/<domain>/www. Normalmente 'claude/current'." },
-    "custom_port": { "type": "string", "description": "Porta do host que o nginx encaminha para '/'. Default do plugin: '3000'." }
+    "custom_port": { "type": "string", "description": "Porta do host que o nginx encaminha para '/'. Default do plugin: '3000'." },
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, em slug. Só existe no tipo claude." }
   },
   "required": ["domain"],
   "additionalProperties": false
@@ -487,6 +488,10 @@ document root.
 ```
 
 Passe só o que quiser alterar. O que já estiver correto não gasta escrita.
+
+O `framework` vai no mesmo PATCH, quando o site ainda não o tem ou ele não
+descreve mais o projeto. As regras do valor são as de `cloudez_create_site`
+(§3.21).
 
 ```jsonc
 // output
@@ -1529,9 +1534,10 @@ instrução de criar pelo painel primeiro. Verificado contra o código real da A
   "type": "object",
   "properties": {
     "cloud": { "type": "number", "description": "Id da cloud onde criar o site" },
-    "domain": { "type": "string", "description": "FQDN da aplicação" }
+    "domain": { "type": "string", "description": "FQDN da aplicação" },
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, em slug" }
   },
-  "required": ["cloud", "domain"],
+  "required": ["cloud", "domain", "framework"],
   "additionalProperties": false
 }
 ```
@@ -1549,8 +1555,16 @@ instrução de criar pelo painel primeiro. Verificado contra o código real da A
 
 ```
 POST /v3/website/
-{ "cloud": 24923, "type": "claude", "values": [{ "slug": "domain", "value": "meusite.com.br" }] }
+{ "cloud": 24923, "type": "claude", "values": [{ "slug": "domain", "value": "meusite.com.br" },
+                                               { "slug": "framework", "value": "nextjs" }] }
 ```
+
+**O `framework` é escolhido pelo modelo, lendo o projeto.** A lista de valores
+conhecidos está em `src/frameworks.ts` do `cloudez-mcp` e vai na descrição da
+tool. O modelo usa o valor da lista que melhor descreve a tecnologia, preferindo o
+framework à linguagem. Tecnologia fora da lista entra como slug novo
+(minúsculas, números e hífen, como "Next.JS" vira `nextjs`), então a tool valida
+só o formato, antes do POST.
 
 **`cloud` é o id inteiro de um `Node`** (o que `cloudez_list_clouds`, §3.22,
 devolve), não um objeto. **`type` aceita o slug diretamente** — `"claude"` — a
