@@ -208,7 +208,8 @@ estava em `www`, e o deploy parece não ter efeito.
 **O `database:` fica para depois.** Ele registra onde o banco de produção mora —
 `cloudez` para a instância gerenciada, `docker` para o container com volume
 nomeado — e a escolha é do `/cloudez:compose`, que é onde o usuário a faz. Não
-pergunte aqui: seria decidir antes de saber se a aplicação precisa de banco.
+pergunte aqui: seria decidir antes de saber se a aplicação precisa de banco, e de
+qual engine, que é o que decide a recomendação.
 
 **Não há mais nada para o usuário preencher.** O arquivo sai completo: nem o
 destino ssh nem o diretório do servidor moram nele — vem do `cloudez_get_site` a cada deploy, e o `/cloudez:deploy`

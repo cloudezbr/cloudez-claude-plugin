@@ -270,9 +270,10 @@ o próprio deploy.
 > perguntando o que ele não responde. Se já existe um Compose, ele **não é
 > reescrito**: aquele arquivo é o de desenvolvimento, é o que você roda todo dia, e
 > as diferenças de produção vão para um `docker-compose.cloudez.yml` que só o
-> servidor lê. Precisando de banco, ele pergunta em vez de decidir — o padrão é no
-> container, com volume nomeado, e a alternativa é uma instância gerenciada pela
-> Cloudez.
+> servidor lê. Precisando de banco, a engine decide a recomendação: MySQL, MariaDB
+> e PostgreSQL vão para uma instância gerenciada pela Cloudez, as demais ficam no
+> container, com volume nomeado. Sem engine definida, ele sugere uma das
+> gerenciadas. A escolha final é sua.
 >
 > Em linguagem natural: *"cria o docker-compose"*, *"containeriza essa
 > aplicação"*, *"preciso de um postgres aqui"*.
@@ -609,10 +610,24 @@ em quem tem interface com gente.
 
 ## Banco de dados
 
-O padrão é **no container, com volume nomeado** — o banco no mesmo arquivo que o
-resto, subindo igual na máquina de quem desenvolve e no servidor, sem depender de
-recurso provisionado na conta. O volume nomeado importa porque o Postgres roda
-como o usuário `postgres` da imagem, e volume nomeado herda essa dona.
+A engine decide a recomendação para produção:
+
+| Engine | Recomendação |
+|---|---|
+| MySQL, MariaDB, PostgreSQL | Instância gerenciada pela Cloudez |
+| Qualquer outra | No container, com volume nomeado |
+| Ainda não definida | Uma das engines gerenciadas pela Cloudez |
+
+A gerenciada é o padrão para as três porque dá ao usuário segurança, performance e
+suporte da Cloudez, e tira do projeto o backup, a atualização e o disco. MariaDB
+usa o engine `mysql` da Cloudez. A recomendação ainda passa pelo aceite do
+usuário, porque é recurso na conta e pode ser cobrado. Recusada, ou sem o engine
+habilitado na conta, o banco vai para o container.
+
+**No container**, o banco fica no mesmo arquivo que o resto, subindo igual na
+máquina de quem desenvolve e no servidor. O volume nomeado importa porque o
+Postgres roda como o usuário `postgres` da imagem, e volume nomeado herda essa
+dona.
 
 O preço é o backup, que passa a ser do projeto — e o plugin o configura, em vez
 de deixar a instrução escrita e nada rodando. São duas chamadas:
@@ -643,12 +658,13 @@ em silêncio é o modo de falha padrão dessa rotina.
 banco ele junta a permissão dependente do host com uma semeadura que copia arquivo
 de um datadir possivelmente em uso — cópia inconsistente, na melhor hipótese.
 
-Depois de propor isso, o `/cloudez:compose` **oferece** a alternativa gerenciada,
-como otimização e não como padrão: `cloudez_create_database(domain, engine,
+O backup automático cobre só MySQL, MariaDB e PostgreSQL. Para as demais engines
+no container, o dump fica com o projeto.
+
+**Na gerenciada**, `cloudez_create_database(domain, engine,
 database_name)` provisiona a instância na cloud do site e a vincula a ele. A cloud
 e o vínculo saem do domínio; a senha é gerada pela tool e nunca recebida pela
-conversa. O que ela resolve é justamente o backup; o que ela custa é recurso na
-conta, que pode ser cobrado. Em produção o serviço de banco do Compose não sobe
+conversa. Em produção o serviço de banco do Compose não sobe
 (`profiles: ["dev"]`), e quem depende dele precisa de `depends_on: !reset null` —
 sem isso o Compose recusa o projeto inteiro. Engines disponíveis variam por
 empresa: confira com `cloudez_list_database_types`.
