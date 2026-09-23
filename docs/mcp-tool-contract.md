@@ -220,7 +220,7 @@ maior a conta, que é justamente quando alguém precisa procurar.
 // output
 {
   "sites": [
-    { "domain": "meusite.com.br", "name": "meusite", "stack": "static" }
+    { "domain": "meusite.com.br", "id": 4821, "stack": "static" }
   ],
   "total": 42,                       // o que a API declara ter, quando declara
   "truncated": "…"                   // só quando a listagem parou antes do fim
@@ -281,6 +281,11 @@ usuário preencher o resto à mão sem desconfiar do que veio da API. Um `host`
 inventado não falha na tool, falha num deploy contra um servidor que não é o
 dele.
 
+**Aceita o `id` do site no lugar do `domain`**, um dos dois e nunca os dois. Pelo
+id a consulta é `GET /v3/website/<id>/`, o mesmo recurso do PATCH (§3.4), e o
+resultado é sempre `exact` ou `site_not_found`: não há candidatos. O `domain`
+do retorno é o que o setup grava no `.cloudez.yaml`.
+
 O domínio é normalizado para minúsculas antes da consulta, como no
 `cloudez-setup`: o domínio vira caminho no servidor, e caminho diferencia
 maiúscula onde o DNS não diferencia.
@@ -328,7 +333,7 @@ pelo atributo `domain` do recurso quanto pelo `value` da entrada com
 `slug: "domain"`, e casar por qualquer uma basta. Preferir uma delas faria a
 busca falhar justamente quando o usuário digita o domínio que está na outra — e
 ele não tem como saber qual das duas o painel mostrou. O `name` nunca entra nessa
-comparação.
+comparação, e também não sai no retorno.
 
 Quando as duas divergem, o candidato sai com o `domain` principal (o de `values`)
 e as demais em `other_domains`, para o usuário reconhecer o site por qualquer uma.
@@ -357,8 +362,8 @@ devolve os candidatos com o domínio de cada um, e o `/cloudez:setup` pergunta.
 
 ```jsonc
 // input
-{ "type": "object", "properties": { "domain": { "type": "string" } },
-  "required": ["domain"], "additionalProperties": false }
+{ "type": "object", "properties": { "domain": { "type": "string" }, "id": { "type": "number" } },
+  "additionalProperties": false }   // um dos dois, e só um
 ```
 
 ```jsonc
@@ -367,7 +372,7 @@ devolve os candidatos com o domínio de cada um, e o `/cloudez:setup` pergunta.
   "match": "exact",
   "site": {
     "domain": "meusite.com.br",
-    "name": "meusite",
+    "id": 4821,
     "stack": "claude",
     "app_root_path": "claude/current",
     "custom_port": "3000",

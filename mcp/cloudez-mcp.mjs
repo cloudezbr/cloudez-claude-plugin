@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.21 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.22 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -27655,7 +27655,6 @@ function domainsOf(item) {
 }
 function mapSite(domain, raw) {
   const site = { domain };
-  const name = valueOf(raw, "name");
   const typeObj = raw.type ?? {};
   const stack = valueOf(raw, "stack") ?? (typeof typeObj.slug === "string" ? typeObj.slug : void 0);
   const release = valueOf(raw, "current_release");
@@ -27663,7 +27662,6 @@ function mapSite(domain, raw) {
   const port = valueOf(raw, "custom_port");
   const framework = valueOf(raw, "framework");
   const temporary = valueOf(raw, "temporary_address") ?? (typeof raw.temporary_address === "string" && raw.temporary_address.trim() !== "" ? raw.temporary_address.trim() : void 0);
-  if (name) site.name = name;
   if (stack) site.stack = stack;
   if (release) site.current_release = release;
   if (appRoot) site.app_root_path = appRoot;
@@ -27695,9 +27693,8 @@ function mapSite(domain, raw) {
 function summarize(item, domains) {
   const summary = { domain: domains[0] };
   if (domains.length > 1) summary.other_domains = domains.slice(1);
-  const name = valueOf(item, "name");
   const stack = valueOf(item, "stack");
-  if (name) summary.name = name;
+  if (typeof item.id === "string" || typeof item.id === "number") summary.id = item.id;
   if (stack) summary.stack = stack;
   return summary;
 }
@@ -27722,6 +27719,39 @@ async function getSite(domain) {
   };
 }
 var CONFIGURABLE_SLUGS = ["app_root_path", "custom_port", "framework"];
+async function getSiteById(id) {
+  const numero = Number(id);
+  if (!Number.isInteger(numero) || numero <= 0) {
+    throw new ToolError("invalid_argument", `'${id}' n\xE3o \xE9 um id de site.`, {
+      hint: "O id \xE9 o n\xFAmero que o painel da Cloudez mostra para o site. Na d\xFAvida, busque pelo dom\xEDnio."
+    });
+  }
+  let item;
+  try {
+    item = await apiGet(sitePatchPath(numero));
+  } catch (err) {
+    if (err instanceof ToolError && err.body.error.code === "site_not_found") {
+      throw new ToolError("site_not_found", `Nenhum site com o id ${numero} nesta conta.`, {
+        hint: "Confira o id com o usu\xE1rio, ou busque pelo dom\xEDnio com cloudez_get_site."
+      });
+    }
+    throw err;
+  }
+  const [domain] = domainsOf(item);
+  if (!domain) {
+    throw new ToolError("upstream_unavailable", `A API devolveu o site ${numero} sem dom\xEDnio.`, {
+      retryable: false,
+      hint: "Confira o site no painel da Cloudez: sem dom\xEDnio n\xE3o h\xE1 onde publicar."
+    });
+  }
+  return { match: "exact", site: mapSite(domain, item), raw: item };
+}
+async function findSite(args) {
+  if (args.domain === void 0 === (args.id === void 0)) {
+    throw new ToolError("invalid_argument", "Passe o dom\xEDnio ou o id do site, e s\xF3 um deles.");
+  }
+  return args.id !== void 0 ? getSiteById(args.id) : getSite(args.domain);
+}
 async function configureSite(domain, desejado) {
   if (desejado.framework !== void 0 && !isFrameworkSlug(desejado.framework)) {
     throw invalidFramework(desejado.framework);
@@ -29856,7 +29886,7 @@ async function resolvePanelHosts() {
 var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, em slug. Use o valor da lista que melhor a descreve, preferindo o framework \xE0 linguagem (nextjs a nodejs, django a python). Se nenhum servir, escreva o nome dela em slug, como 'Next.JS' vira 'nextjs'. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.2.21"
+  version: "0.2.22"
 });
 server.registerTool(
   "cloudez_auth_status",
@@ -29927,15 +29957,16 @@ server.registerTool(
   "cloudez_get_site",
   {
     title: "Detalhes de um site da conta",
-    description: "Busca um site da conta Cloudez pelo dom\xEDnio. Chame ANTES de criar um .cloudez.yaml para confirmar que o dom\xEDnio existe na conta \u2014 um dom\xEDnio com typo aceito aqui vira um deploy que falha longe da causa. Devolve match:'exact' com os dados do site, ou match:'candidates' com os sites parecidos quando n\xE3o h\xE1 casamento perfeito \u2014 nesse caso N\xC3O escolha por conta pr\xF3pria, liste os candidatos e pergunte ao usu\xE1rio qual \xE9 o dele. Falha com site_not_found quando a busca n\xE3o devolve nada. Exige autentica\xE7\xE3o: se falhar com not_authenticated, conduza o /cloudez:login antes de tentar de novo.",
+    description: "Busca um site da conta Cloudez pelo dom\xEDnio ou pelo id, quando o usu\xE1rio der o id no lugar do dom\xEDnio. Passe um dos dois, nunca os dois. Chame ANTES de criar um .cloudez.yaml para confirmar que o dom\xEDnio existe na conta \u2014 um dom\xEDnio com typo aceito aqui vira um deploy que falha longe da causa. Devolve match:'exact' com os dados do site, ou match:'candidates' com os sites parecidos quando n\xE3o h\xE1 casamento perfeito \u2014 nesse caso N\xC3O escolha por conta pr\xF3pria, liste os candidatos e pergunte ao usu\xE1rio qual \xE9 o dele. Falha com site_not_found quando a busca n\xE3o devolve nada. Exige autentica\xE7\xE3o: se falhar com not_authenticated, conduza o /cloudez:login antes de tentar de novo.",
     inputSchema: object({
-      domain: string2().describe("FQDN do site, sem protocolo nem caminho. Ex.: meusite.com.br")
+      domain: string2().optional().describe("FQDN do site, sem protocolo nem caminho. Ex.: meusite.com.br"),
+      id: number2().optional().describe("Id do site na Cloudez, no lugar do dom\xEDnio. O resultado \xE9 sempre exato.")
     }),
     annotations: { readOnlyHint: true, openWorldHint: true }
   },
-  async ({ domain }) => {
+  async ({ domain, id }) => {
     try {
-      return okResult({ ...await getSite(domain) });
+      return okResult({ ...await findSite({ domain, id }) });
     } catch (err) {
       return errorResult(err);
     }

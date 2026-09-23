@@ -1,6 +1,6 @@
 ---
 description: Cria o .cloudez.yaml do projeto para um domínio e environment, se ainda não existir
-argument-hint: <domain> <environment> [--database cloudez|docker]
+argument-hint: <domain|id> <environment> [--cloud id|fqdn] [--database cloudez|docker]
 allowed-tools: mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_list_sites, mcp__cloudez__cloudez_list_clouds, mcp__cloudez__cloudez_create_site, mcp__cloudez__cloudez_configure_site, mcp__cloudez__cloudez_authorize_ssh_key, mcp__cloudez__cloudez_find_compose, mcp__cloudez__cloudez_list_local_ssh_keys, Bash(cloudez-setup:*), Read, AskUserQuestion
 ---
 
@@ -22,7 +22,12 @@ Nunca peça o token na conversa.
 
 ## 1. Domínio
 
-Argumentos recebidos: `$ARGUMENTS` — o domínio e o environment, nessa ordem.
+Argumentos recebidos: `$ARGUMENTS` — o domínio e o environment, nessa ordem, e
+opcionalmente `--cloud`, usado só se for preciso criar o site.
+
+**No lugar do domínio, o usuário pode dar o ID do site**, um número inteiro. Nesse
+caso o passo 2 busca pelo ID, e dali em diante vale o `domain` que o site
+devolver: é ele que vai para o `.cloudez.yaml`.
 
 Comece pelo domínio, sozinho. Pergunte em texto livre, propondo um valor se o
 projeto der pista dele (README, `package.json`, config de CI). Tem que ser um
@@ -35,17 +40,21 @@ descartada.
 ## 2. Confirmar o site na conta
 
 ```
-cloudez_get_site(domain: "<domain>")
+cloudez_get_site(domain: "<domain>")   # ou cloudez_get_site(id: <id>)
 ```
+
+Pelo ID o resultado é sempre `exact`, ou `site_not_found`. Neste último, não há
+site a criar a partir de um ID: pergunte ao usuário o domínio, ou confira o ID com
+ele.
 
 A busca não é exata do lado da API: ela pode trazer domínios vizinhos. Por isso há
 três desfechos, e **em nenhum deles você segue sozinho**.
 
 ### `match: "exact"` — achou
 
-Diga que encontrou, mostrando o `domain` e o que mais veio (`name`, `stack`,
-`ssh.host`). **Peça confirmação ao usuário e espere a resposta** antes de ir para
-o passo 3.
+Diga que encontrou, mostrando o `id` e o `domain`, que são o que identifica o
+site na Cloudez, e o que mais veio (`stack`, `ssh.host`). **Peça confirmação ao
+usuário e espere a resposta** antes de ir para o passo 3.
 
 Parece redundante confirmar um casamento exato, e não é: o domínio pode estar
 certo e ser o projeto errado — a mesma conta hospeda vários sites, e este é o
@@ -56,7 +65,7 @@ própria: pergunte o domínio correto e volte ao passo 1.
 
 ### `match: "candidates"` — não achou exato, mas achou parecidos
 
-**Liste os candidatos**, mostrando o `domain` de cada um — e também os de
+**Liste os candidatos**, mostrando o `id` e o `domain` de cada um — e também os de
 `other_domains`, quando vierem: o site é conhecido por mais de um domínio, e o
 usuário pode reconhecê-lo por qualquer um deles. Use AskUserQuestion quando forem
 poucos, com uma opção por site, e pergunte se o site dele é algum daqueles.
@@ -116,11 +125,15 @@ cloudez_list_clouds()
 - **Nenhuma cloud** — vá direto para "Contratar uma cloud nova", abaixo. Isto é
   conta antiga sem trial nenhum contratado; não confunda com conta nova, que já
   sai do `/cloudez:login` com uma (`cloudez_setup_trial_cloud`);
+- **Veio `--cloud`, ou o usuário já disse a cloud** — ele pode dar o `id` ou o
+  `fqdn`. Procure na lista pelos dois e use o `id` da que casar, sem perguntar.
+  Não casando com nenhuma, diga isso e siga pelos casos abaixo;
 - **Uma cloud só** — use o `id` dela direto, sem perguntar: não há entre o quê
   escolher;
-- **Mais de uma** — pergunte qual com AskUserQuestion, mostrando `name` e
+- **Mais de uma** — pergunte qual com AskUserQuestion, mostrando `id`, `name` e
   `fqdn` de cada uma, e acrescente "contratar uma nova" como opção — o usuário
-  pode querer uma cloud separada mesmo já tendo outras.
+  pode querer uma cloud separada mesmo já tendo outras. Ele pode responder com o
+  `id` ou o `fqdn`.
 
 Se ele escolher "contratar uma nova", vá para "Contratar uma cloud nova",
 abaixo. Do contrário, com o `id` escolhido:
