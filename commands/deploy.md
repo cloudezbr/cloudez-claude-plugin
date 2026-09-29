@@ -529,6 +529,10 @@ isso, e a linha deixou de ser necessária — [A12](#a12).
 Se o site não tem `temporary_address`, mostre só o oficial — não invente um
 endereço nem prometa que existe.
 
+**Não fale em ativar o HTTPS, em nenhum dos casos.** Um domínio que acabou de
+apontar pode responder sem certificado por alguns minutos; quem cuida disso é a
+Cloudez, sozinha, e não há passo para o usuário executar — [A14](#a14).
+
 ## 10. Rollback
 
 Fora de um deploy, isto é o `/cloudez:rollback` — que confirma o alvo com o
@@ -775,3 +779,28 @@ e mandaria o usuário mexer num DNS que pode estar perfeito.
 É o mesmo exagero que o `cez-verify` acabou de eliminar do caso do CDN ([A12](#a12)),
 e reintroduzi-lo numa linha fixa desfaria o ganho. A causa vai no `summary`, que é
 escrito por caso e admite não saber quando não sabe.
+
+<a id="a14"></a>
+
+### A14 — Por que não se fala em "ativar o HTTPS"
+
+Esta entrada existe por um defeito de comportamento observado: sem nenhum passo
+mandando, o modelo vinha dizendo ao usuário que faltava ativar o HTTPS no painel
+depois de o site ser provisionado. Não falta, e não há onde ativar.
+
+A Cloudez pede o certificado sozinha quando o domínio passa a apontar para ela, e
+uma rotina periódica repete o pedido enquanto o site hospedado não tiver um. A
+emissão é assíncrona: pode levar minutos, e nesse intervalo o site responde por
+`http`. É por isso, aliás, que o `cloudez_health_check` tenta `https` e cai para
+`http` — um site sem certificado **ainda** não é um site quebrado.
+
+Um deploy é o momento mais provável para o usuário abrir o domínio pela primeira
+vez, e portanto o momento em que essa frase errada custa mais: ela manda procurar
+no painel um botão que não existe. Se ele perguntar, a resposta é que o
+certificado sai sozinho.
+
+O caso em que há algo a fazer é outro: DNS apontado há bastante tempo e site
+ainda sem HTTPS. Aí existe uma tool — `cloudez_request_certificate` —, mas ela é
+para pedido explícito do usuário, não para ser chamada no fim de um deploy. O
+apêndice B do `docs/mcp-tool-contract.md` registra por que pedir cedo demais
+atrasa a emissão em vez de antecipá-la.

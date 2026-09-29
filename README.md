@@ -270,9 +270,10 @@ o próprio deploy.
 > perguntando o que ele não responde. Se já existe um Compose, ele **não é
 > reescrito**: aquele arquivo é o de desenvolvimento, é o que você roda todo dia, e
 > as diferenças de produção vão para um `docker-compose.cloudez.yml` que só o
-> servidor lê. Precisando de banco, ele pergunta em vez de decidir — o padrão é no
-> container, com volume nomeado, e a alternativa é uma instância gerenciada pela
-> Cloudez.
+> servidor lê. Precisando de banco, a engine decide a recomendação: MySQL, MariaDB
+> e PostgreSQL vão para uma instância gerenciada pela Cloudez, as demais ficam no
+> container, com volume nomeado. Sem engine definida, ele sugere uma das
+> gerenciadas. A escolha final é sua.
 >
 > Em linguagem natural: *"cria o docker-compose"*, *"containeriza essa
 > aplicação"*, *"preciso de um postgres aqui"*.
@@ -301,6 +302,27 @@ Em linguagem natural: *"volta a versão anterior"*, *"desfaz o último deploy"*,
 - **O servidor guarda o histórico.** Cada deploy escreve um manifesto em
   `<root>/.cloudez/deploys/`, com o commit e o hash do que subiu. Serve para
   descobrir o que está no ar mesmo quando quem publicou foi outra pessoa.
+
+## HTTPS: não há nada para ativar
+
+O certificado é emitido pela Cloudez sozinha. Assim que o domínio passa a apontar
+para ela, o pedido é enfileirado; e uma rotina periódica repete o pedido enquanto
+um site hospedado não tiver certificado. Quando a emissão termina, o HTTPS é
+ligado no site sem ninguém apertar nada. **Não existe botão de ativar, nem no
+painel nem aqui** — se o assistente disser que falta ativar, ele está inventando.
+
+A emissão é assíncrona e leva alguns minutos. Nesse intervalo o site responde por
+`http`, e é por isso que a verificação de saúde do deploy tenta `https` e cai
+para `http` antes de dizer que algo está errado: site sem certificado **ainda**
+não é site quebrado.
+
+Tem uma tool para o caso em que o DNS já aponta há bastante tempo e o site
+continua sem HTTPS — peça em linguagem natural (*"pede o certificado do
+meusite.com.br"*). Ela não faz parte de nenhum comando de propósito: pedir antes
+de o domínio apontar registra um pedido que não entra na fila e, enquanto ele
+estiver lá, impede a Cloudez de pedir sozinha. Chamada de novo depois que o DNS
+apontar, ela reenfileira esse pedido, que é o que destrava o caso. O porquê
+completo está no apêndice B de [`docs/mcp-tool-contract.md`](docs/mcp-tool-contract.md).
 
 ## Estado atual
 
@@ -425,6 +447,20 @@ Em linguagem natural: *"volta a versão anterior"*, *"desfaz o último deploy"*,
       ela faltar, ou quando checar login for o próprio pedido (o
       `/cloudez:login` continua narrando, porque aí é exatamente isso que o
       usuário perguntou)
+- [x] HTTPS documentado como automático, e `cloudez_request_certificate` para o
+      pedido explícito. O defeito era de comportamento: sem nenhum passo
+      mandando, o assistente dizia ao usuário que faltava "ativar o HTTPS no
+      painel" depois de provisionar o site — passo que não existe. O fato agora
+      está escrito onde o modelo lê (descrição das tools, contrato §3.23 e
+      apêndice B, `commands/setup.md` e `commands/deploy.md`), e o
+      `cloudez_get_site` devolve o estado do certificado. A tool lê antes de
+      escrever porque as duas escritas não são intercambiáveis: com um pedido
+      pendente no lugar, um POST na coleção não enfileira emissão nenhuma — e
+      um pendente parado também impede a Cloudez de pedir sozinha. **Não foi
+      exercitado contra a API real:** as rotas, o `provider` e o gatilho
+      automático foram lidos no código da API (`CertificateViewSet` v3,
+      `CertificateCreateSerializer`, `auto_start_https`, `ask_certificates`), e
+      a suíte cobre os caminhos contra uma API falsa
 - [ ] O rollback de container depende de estado LOCAL. O `cloudez_rollback` é
       chaveado por domínio + root (estado do servidor), mas o `compose_build` e o
       `compose_up` são chaveados por `deploy_id` (estado em `~/.cloudez/state/`).
@@ -574,10 +610,24 @@ em quem tem interface com gente.
 
 ## Banco de dados
 
-O padrão é **no container, com volume nomeado** — o banco no mesmo arquivo que o
-resto, subindo igual na máquina de quem desenvolve e no servidor, sem depender de
-recurso provisionado na conta. O volume nomeado importa porque o Postgres roda
-como o usuário `postgres` da imagem, e volume nomeado herda essa dona.
+A engine decide a recomendação para produção:
+
+| Engine | Recomendação |
+|---|---|
+| MySQL, MariaDB, PostgreSQL | Instância gerenciada pela Cloudez |
+| Qualquer outra | No container, com volume nomeado |
+| Ainda não definida | Uma das engines gerenciadas pela Cloudez |
+
+A gerenciada é o padrão para as três porque dá ao usuário segurança, performance e
+suporte da Cloudez, e tira do projeto o backup, a atualização e o disco. MariaDB
+usa o engine `mysql` da Cloudez. A recomendação ainda passa pelo aceite do
+usuário, porque é recurso na conta e pode ser cobrado. Recusada, ou sem o engine
+habilitado na conta, o banco vai para o container.
+
+**No container**, o banco fica no mesmo arquivo que o resto, subindo igual na
+máquina de quem desenvolve e no servidor. O volume nomeado importa porque o
+Postgres roda como o usuário `postgres` da imagem, e volume nomeado herda essa
+dona.
 
 O preço é o backup, que passa a ser do projeto — e o plugin o configura, em vez
 de deixar a instrução escrita e nada rodando. São duas chamadas:
@@ -608,12 +658,13 @@ em silêncio é o modo de falha padrão dessa rotina.
 banco ele junta a permissão dependente do host com uma semeadura que copia arquivo
 de um datadir possivelmente em uso — cópia inconsistente, na melhor hipótese.
 
-Depois de propor isso, o `/cloudez:compose` **oferece** a alternativa gerenciada,
-como otimização e não como padrão: `cloudez_create_database(domain, engine,
+O backup automático cobre só MySQL, MariaDB e PostgreSQL. Para as demais engines
+no container, o dump fica com o projeto.
+
+**Na gerenciada**, `cloudez_create_database(domain, engine,
 database_name)` provisiona a instância na cloud do site e a vincula a ele. A cloud
 e o vínculo saem do domínio; a senha é gerada pela tool e nunca recebida pela
-conversa. O que ela resolve é justamente o backup; o que ela custa é recurso na
-conta, que pode ser cobrado. Em produção o serviço de banco do Compose não sobe
+conversa. Em produção o serviço de banco do Compose não sobe
 (`profiles: ["dev"]`), e quem depende dele precisa de `depends_on: !reset null` —
 sem isso o Compose recusa o projeto inteiro. Engines disponíveis variam por
 empresa: confira com `cloudez_list_database_types`.

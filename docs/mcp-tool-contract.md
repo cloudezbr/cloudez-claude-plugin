@@ -4,7 +4,7 @@ Especificação da interface que o servidor MCP (repositório separado) deve exp
 para este plugin. Este documento é a fonte da verdade do contrato: o plugin é
 escrito contra ele, e o servidor MCP o implementa.
 
-Status: **implementado**. As vinte e uma tools descritas existem no servidor e
+Status: **implementado**. As vinte e duas tools descritas existem no servidor e
 são chamadas pelos comandos do plugin; o que segue em aberto está na seção 7.
 
 Boa parte do que está escrito aqui foi aprendido apanhando — endpoints
@@ -220,7 +220,7 @@ maior a conta, que é justamente quando alguém precisa procurar.
 // output
 {
   "sites": [
-    { "domain": "meusite.com.br", "name": "meusite", "stack": "static" }
+    { "domain": "meusite.com.br", "id": 4821, "stack": "static" }
   ],
   "total": 42,                       // o que a API declara ter, quando declara
   "truncated": "…"                   // só quando a listagem parou antes do fim
@@ -281,6 +281,11 @@ usuário preencher o resto à mão sem desconfiar do que veio da API. Um `host`
 inventado não falha na tool, falha num deploy contra um servidor que não é o
 dele.
 
+**Aceita o `id` do site no lugar do `domain`**, um dos dois e nunca os dois. Pelo
+id a consulta é `GET /v3/website/<id>/`, o mesmo recurso do PATCH (§3.4), e o
+resultado é sempre `exact` ou `site_not_found`: não há candidatos. O `domain`
+do retorno é o que o setup grava no `.cloudez.yaml`.
+
 O domínio é normalizado para minúsculas antes da consulta, como no
 `cloudez-setup`: o domínio vira caminho no servidor, e caminho diferencia
 maiúscula onde o DNS não diferencia.
@@ -328,7 +333,7 @@ pelo atributo `domain` do recurso quanto pelo `value` da entrada com
 `slug: "domain"`, e casar por qualquer uma basta. Preferir uma delas faria a
 busca falhar justamente quando o usuário digita o domínio que está na outra — e
 ele não tem como saber qual das duas o painel mostrou. O `name` nunca entra nessa
-comparação.
+comparação, e também não sai no retorno.
 
 Quando as duas divergem, o candidato sai com o `domain` principal (o de `values`)
 e as demais em `other_domains`, para o usuário reconhecer o site por qualquer uma.
@@ -357,8 +362,8 @@ devolve os candidatos com o domínio de cada um, e o `/cloudez:setup` pergunta.
 
 ```jsonc
 // input
-{ "type": "object", "properties": { "domain": { "type": "string" } },
-  "required": ["domain"], "additionalProperties": false }
+{ "type": "object", "properties": { "domain": { "type": "string" }, "id": { "type": "number" } },
+  "additionalProperties": false }   // um dos dois, e só um
 ```
 
 ```jsonc
@@ -367,11 +372,12 @@ devolve os candidatos com o domínio de cada um, e o `/cloudez:setup` pergunta.
   "match": "exact",
   "site": {
     "domain": "meusite.com.br",
-    "name": "meusite",
+    "id": 4821,
     "stack": "claude",
     "app_root_path": "claude/current",
     "custom_port": "3000",
     "temporary_address": "meusite-com-br.srv-12.cloudez.io",
+    "certificate": { "status": "valid", "active": true },
     "ssh": {
       "host": "srv-12.cloudez.io",
       "port": 22,
@@ -384,6 +390,13 @@ devolve os candidatos com o domínio de cada um, e o `/cloudez:setup` pergunta.
 
 > Nenhuma credencial no retorno. A chave SSH vive no ambiente do usuário
 > (`~/.ssh/`), não passa pelo MCP nem pelo contexto do modelo.
+
+**`certificate` é o estado do HTTPS, e nenhum dos seus valores é tarefa do
+usuário.** `valid` com `active: true` é HTTPS no ar; `pending` é emissão em
+andamento; a ausência do campo é site sem certificado ainda. A Cloudez pede o
+certificado sozinha — ver `cloudez_request_certificate` (§3.23) e o apêndice
+[A-HTTPS](#a-https). Vem do campo `certificate` do recurso, que a API já devolve
+sem os revogados.
 
 **O destino do ssh não vem de `values`.** Ele mora em dois objetos do recurso:
 
@@ -471,7 +484,8 @@ document root.
   "properties": {
     "domain": { "type": "string" },
     "app_root_path": { "type": "string", "description": "Relativo a ~/<domain>/www. Normalmente 'claude/current'." },
-    "custom_port": { "type": "string", "description": "Porta do host que o nginx encaminha para '/'. Default do plugin: '3000'." }
+    "custom_port": { "type": "string", "description": "Porta do host que o nginx encaminha para '/'. Default do plugin: '3000'." },
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, em slug. Só existe no tipo claude." }
   },
   "required": ["domain"],
   "additionalProperties": false
@@ -479,6 +493,10 @@ document root.
 ```
 
 Passe só o que quiser alterar. O que já estiver correto não gasta escrita.
+
+O `framework` vai no mesmo PATCH, quando o site ainda não o tem ou ele não
+descreve mais o projeto. As regras do valor são as de `cloudez_create_site`
+(§3.21).
 
 ```jsonc
 // output
@@ -1391,7 +1409,7 @@ tê-lo gasto.
 
 Pedido de contratação **paga**, e ausência de `trial_ia_plan_id` (revenda sem
 plano trial configurado), levam ao mesmo lugar — não há tool: a contratação é
-manual, em `<panel_host>/clouds/create` (ver §3.23).
+manual, em `<panel_host>/clouds/create` (ver §3.24).
 
 ---
 
@@ -1464,7 +1482,7 @@ quem chama a rodá-la uma vez por conta — no cadastro, ou no
 só para o cadastro: o limite de um trial por conta é da Cloudez, que recusa o
 segundo com `trial_already_exists` (abaixo). **Não é resposta para
 "contratar um cloud" sem adjetivo**: contratação paga não tem tool, de
-propósito (§3.23) — é dinheiro de verdade e escolha de plano do usuário, não
+propósito (§3.24) — é dinheiro de verdade e escolha de plano do usuário, não
 algo que se decida por ele. A orientação nesse caso é sempre a mesma, manual:
 abrir `<panel_host>/clouds/create` no painel.
 
@@ -1521,9 +1539,10 @@ instrução de criar pelo painel primeiro. Verificado contra o código real da A
   "type": "object",
   "properties": {
     "cloud": { "type": "number", "description": "Id da cloud onde criar o site" },
-    "domain": { "type": "string", "description": "FQDN da aplicação" }
+    "domain": { "type": "string", "description": "FQDN da aplicação" },
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, em slug" }
   },
-  "required": ["cloud", "domain"],
+  "required": ["cloud", "domain", "framework"],
   "additionalProperties": false
 }
 ```
@@ -1541,8 +1560,16 @@ instrução de criar pelo painel primeiro. Verificado contra o código real da A
 
 ```
 POST /v3/website/
-{ "cloud": 24923, "type": "claude", "values": [{ "slug": "domain", "value": "meusite.com.br" }] }
+{ "cloud": 24923, "type": "claude", "values": [{ "slug": "domain", "value": "meusite.com.br" },
+                                               { "slug": "framework", "value": "nextjs" }] }
 ```
+
+**O `framework` é escolhido pelo modelo, lendo o projeto.** A lista de valores
+conhecidos está em `src/frameworks.ts` do `cloudez-mcp` e vai na descrição da
+tool. O modelo usa o valor da lista que melhor descreve a tecnologia, preferindo o
+framework à linguagem. Tecnologia fora da lista entra como slug novo
+(minúsculas, números e hífen, como "Next.JS" vira `nextjs`), então a tool valida
+só o formato, antes do POST.
 
 **`cloud` é o id inteiro de um `Node`** (o que `cloudez_list_clouds`, §3.22,
 devolve), não um objeto. **`type` aceita o slug diretamente** — `"claude"` — a
@@ -1600,11 +1627,18 @@ criar — quem chama confirma com o usuário antes de repetir.
 ### 3.22 `cloudez_list_clouds` — read-only
 
 Lista as clouds (servidores, model `Node` na API) da conta autenticada, para
-escolher o `cloud` de `cloudez_create_site` (§3.21).
+escolher o `cloud` de `cloudez_create_site` (§3.21). Sem argumento devolve a
+primeira página. Com `query` ou `id`, busca uma cloud específica, um dos dois e
+nunca os dois.
 
 ```jsonc
 // input
-{ "type": "object", "properties": {}, "additionalProperties": false }
+{ "type": "object",
+  "properties": {
+    "query": { "type": "string", "description": "Parte do fqdn, do apelido ou do IP" },
+    "id": { "type": "number", "description": "Id da cloud, o número em /clouds/<id> no painel" }
+  },
+  "additionalProperties": false }
 ```
 
 ```jsonc
@@ -1614,17 +1648,32 @@ escolher o `cloud` de `cloudez_create_site` (§3.21).
     { "id": 24923, "name": "meu-servidor", "fqdn": "srv-24923.cloudez.io",
       "is_default": true, "websites_count": 2 }
   ],
-  "truncated": "…"   // só quando há mais clouds do que a primeira página trouxe
+  "query": "configrsys03",   // só quando houve busca por termo
+  "truncated": "…"           // só quando há mais clouds do que a busca trouxe
 }
 ```
 
-**Endpoint:** `GET /v3/cloud/?page_size=20` — já escopado pela API ao usuário
-autenticado (ou à empresa/time dele), sem precisar de `company_id`.
+**Endpoints**, todos já escopados pela API ao usuário autenticado (ou à
+empresa/time dele), sem precisar de `company_id`:
 
-**Sem loop de paginação, ao contrário do `cloudez_list_sites` (§3.2).** Uma
-conta tem tipicamente poucas clouds — o trial cria uma só —, então a página
-máxima (20) cobre o caso comum. Havendo mais, `truncated` avisa em vez de
-afirmar que a lista é completa.
+```
+GET /v3/cloud/?page_size=20                    # sem argumento
+GET /v3/cloud/?page_size=20&search=<termo>     # com query
+GET /v3/cloud/<id>/                            # com id
+```
+
+**Sem argumento, só a primeira página.** Uma conta tem tipicamente poucas
+clouds, e a página máxima (20) cobre o caso comum. Havendo mais, `truncated`
+avisa em vez de afirmar que a lista é completa.
+
+**A busca por termo é a da própria API** (`search` do `CloudFilter`), que casa
+em parte com apelido, fqdn, IP e e-mail do administrador. Ela existe porque, sem
+ela, uma cloud fora da primeira página não era encontrável, e o
+`cloudez_list_sites` não ajuda com cloud que ainda não tem site. Segue as páginas
+até 5 (100 clouds); passando disso, `truncated` pede um termo mais específico.
+
+**Pelo `id`**, a cloud inexistente ou fora do alcance do usuário vira
+`cloud_not_found`.
 
 **`name` é `nickname`, ou `name`, ou um placeholder** — a API pode não trazer
 nenhum dos dois preenchido. Item sem `id` válido é descartado, pela mesma razão
@@ -1632,7 +1681,67 @@ de `cloudez_get_site`: não haveria como ser escolhido pelo usuário.
 
 ---
 
-### 3.23 Fora do escopo, por enquanto
+### 3.23 `cloudez_request_certificate` — **mutating**
+
+Pede à Cloudez a emissão do certificado HTTPS de um site.
+
+**Esta tool não faz parte de nenhum procedimento**, e é a única do contrato de
+que isso se diz explicitamente. A Cloudez pede o certificado sozinha assim que o
+domínio passa a apontar para ela, e repete o pedido enquanto o site hospedado não
+tiver um. Não existe passo de "ativar o HTTPS" para o usuário executar — ver o
+apêndice [A-HTTPS](#a-https), que registra por que esta frase precisa estar
+escrita. A tool existe para dois casos: o usuário pedir a emissão na hora, e um
+pedido pendente que ficou parado.
+
+```jsonc
+// input
+{ "type": "object", "properties": { "domain": { "type": "string" } },
+  "required": ["domain"], "additionalProperties": false }
+```
+
+```jsonc
+// output
+{
+  "domain": "meusite.com.br",
+  "status": "requested",        // already_active | requeued | requested
+  "certificate_id": 77,
+  "hosted": true,               // o domínio aponta para a Cloudez?
+  "summary": "O certificado foi pedido. A emissão leva alguns minutos.",
+  "note": "…"
+}
+```
+
+**Lê antes de escrever, e o que lê decide qual rota chama.** O estado vem da
+mesma busca por domínio de §3.3, sem chamada extra: o `certificate` que aquela
+tool expõe, e o `is_hosted` do recurso, que fica no payload da API:
+
+| Estado do site | Rota chamada | `status` |
+|---|---|---|
+| certificado válido e ativo | nenhuma | `already_active` |
+| já existe um pedido | `POST /v3/certificate/{id}/requeue/` | `requeued` |
+| nenhum certificado | `POST /v3/certificate/` (`website`, `provider: 4`) | `requested` |
+
+**As duas escritas não são intercambiáveis**, e é por isso que a leitura vem
+antes: com um pedido pendente no lugar, um POST na coleção grava um segundo
+registro e não enfileira emissão nenhuma. Quem reenfileira é o `requeue`.
+
+**`provider: 4` (Cloudez LE) é o único valor que serve.** Com os outros, a API
+grava o registro e ninguém emite — o certificado ficaria pendente para sempre,
+sem erro em lugar nenhum.
+
+**O retorno nunca diz que o HTTPS está no ar.** `requested` e `requeued` dizem
+que o pedido saiu; a emissão é assíncrona, leva minutos e pode falhar. Quem
+confirma é `cloudez_get_site`, no `certificate`.
+
+**Com `hosted: false` a tool pede do mesmo jeito**, e o `summary` e o `note`
+carregam a ressalva: enquanto o domínio não apontar, o pedido fica registrado mas
+não entra na fila. O caminho de volta está no `note` e precisa continuar lá —
+chamar a tool de novo depois que o DNS apontar é o que reenfileira o pendente.
+Ver [A-HTTPS](#a-https).
+
+---
+
+### 3.24 Fora do escopo, por enquanto
 
 Uma tool saiu desta proposta junto com a feature correspondente do plugin. Fica
 registrada para não ser redescoberta do zero:
@@ -1702,6 +1811,7 @@ Códigos previstos:
 |---|---|---|
 | `invalid_argument` | não | a Cloudez recusou o corpo enviado; `message` traz o campo e a razão quando o 400 os nomeia |
 | `site_not_found` | não | domínio não existe na conta |
+| `cloud_not_found` | não | id de cloud que não existe na conta, em `cloudez_list_clouds` |
 | `not_authenticated` | não | nenhum token configurado na máquina |
 | `token_invalid` | não | a Cloudez recusou o token (expirado ou revogado) |
 | `deploy_not_found` | não | `deploy_id` inválido ou expirado |
@@ -1906,3 +2016,42 @@ não tem terminal de controle (`/dev/tty` responde `Device not configured`). Iss
 valeria a pena se a alternativa fosse pior — mas gerar um token no painel resolve
 o mesmo problema sem a senha do usuário passar por lugar nenhum, e o 2FA, que só
 funciona com terminal, deixa de ser um problema.
+
+---
+
+<a id="a-https"></a>
+
+## Apêndice B — o HTTPS é automático, e pedir cedo demais atrasa
+
+Esta entrada existe por um defeito de comportamento, não por precaução: o modelo
+vinha dizendo ao usuário, por conta própria, que faltava "ativar o HTTPS" no
+painel depois de provisionar o site. Não falta, e não há onde ativar. Como
+nenhum comando mandava dizer isso, a correção é o fato ficar escrito onde o
+modelo lê — aqui, nas descrições das tools, e nos comandos que tocam o assunto.
+
+**O que a Cloudez faz sozinha**, confirmado no código da API (`cloudez-api`):
+
+1. Quando o site passa a ser reconhecido como hospedado — ou seja, quando o
+   domínio começa a chegar na Cloudez —, um signal cria um certificado pendente
+   e o enfileira para emissão. O mesmo acontece quando os aliases do site mudam.
+2. Uma rotina periódica varre todo site hospedado que não tenha certificado
+   ativo **nem pendente** e pede de novo. É por isso que um site que ficou sem
+   HTTPS acaba ganhando um sem ninguém mexer.
+3. Quando a emissão termina, a própria API liga o HTTPS no site. O usuário não
+   aciona nada em momento nenhum.
+4. O endereço temporário (`*.cloudezapp.io`, `*.configr.cloud`) é excluído desse
+   pedido de propósito: ele já é coberto por certificado curinga.
+
+**A armadilha, e a razão de a tool reenfileirar em vez de só criar.** O
+enfileiramento só acontece se houver ao menos um domínio já apontado para a
+Cloudez. Um pedido criado antes disso vira um certificado pendente que nunca foi
+para a fila — e, a partir daí, tanto o signal quanto a rotina periódica pulam o
+site, porque os dois se guiam por "já existe um pendente". O efeito é o oposto
+do pretendido: pedir cedo demais **impede** a emissão automática em vez de
+antecipá-la.
+
+Daí as duas decisões de §3.23. A tool pede mesmo com o domínio ainda não
+apontado — é o que o usuário mandou fazer, e recusar seria ela decidir sozinha —,
+mas o retorno carrega a ressalva e o caminho de volta: chamada de novo depois que
+o DNS apontar, ela encontra o pendente e o reenfileira, que é o que tira o site
+do limbo. Um `requeue` trocado por um POST na coleção reabre o defeito inteiro.

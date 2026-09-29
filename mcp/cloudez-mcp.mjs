@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.19 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.23 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -27017,9 +27017,21 @@ function sitePatchPath(id) {
 function websiteCreatePath() {
   return process.env.CLOUDEZ_API_WEBSITE_CREATE_PATH || "/v3/website/";
 }
+function certificatePath() {
+  return process.env.CLOUDEZ_API_CERTIFICATE_PATH || "/v3/certificate/";
+}
+function certificateRequeuePath(id) {
+  const template = process.env.CLOUDEZ_API_CERTIFICATE_REQUEUE_PATH || "/v3/certificate/{id}/requeue/";
+  return template.replace("{id}", encodeURIComponent(String(id)));
+}
+var CERTIFICATE_PROVIDER_CLOUDEZ_LE = 4;
 function cloudListPath() {
   return process.env.CLOUDEZ_API_CLOUD_LIST_PATH || "/v3/cloud/";
 }
+function cloudPath(id) {
+  return `${cloudListPath().replace(/\/+$/, "")}/${encodeURIComponent(String(id))}/`;
+}
+var MAX_CLOUD_PAGES = 5;
 function cloudUserPatchPath(id) {
   const template = process.env.CLOUDEZ_API_CLOUD_USER_PATCH_PATH || "/v3/cloud-user/{id}/";
   return template.replace("{id}", encodeURIComponent(String(id)));
@@ -27288,6 +27300,313 @@ function normalizeHost(entrada) {
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(host) ? host : void 0;
 }
 
+// src/frameworks.ts
+var FRAMEWORKS = [
+  "actix-web",
+  "adonisjs",
+  "aiohttp",
+  "alpinejs",
+  "amber",
+  "analog",
+  "angular",
+  "angularjs",
+  "ant-design",
+  "apache-flex",
+  "apollo",
+  "appwrite",
+  "aspnet",
+  "aspnet-core",
+  "aspnet-mvc",
+  "astro",
+  "aurelia",
+  "axum",
+  "backbonejs",
+  "beego",
+  "bigcommerce",
+  "blazor",
+  "blitzjs",
+  "bootstrap",
+  "bottle",
+  "bubble",
+  "buffalo",
+  "bulma",
+  "bun",
+  "cakephp",
+  "catalyst",
+  "chakra-ui",
+  "cherrypy",
+  "chi",
+  "clojure",
+  "clojure-ring",
+  "clojurescript",
+  "codeigniter",
+  "coldfusion",
+  "concrete-cms",
+  "contentful",
+  "cowboy",
+  "cpp",
+  "craft-cms",
+  "crow",
+  "crystal",
+  "csharp",
+  "d3js",
+  "dancer",
+  "dart",
+  "dash",
+  "deno",
+  "dioxus",
+  "directus",
+  "django",
+  "django-cms",
+  "docusaurus",
+  "dojo",
+  "dotnet",
+  "dotnetnuke",
+  "dream",
+  "drogon",
+  "dropwizard",
+  "drupal",
+  "echo",
+  "eleventy",
+  "elixir",
+  "elm",
+  "elysia",
+  "emberjs",
+  "erlang",
+  "express",
+  "fable",
+  "falcon",
+  "fastapi",
+  "fastify",
+  "feathers",
+  "fiber",
+  "firebase",
+  "flask",
+  "flutter",
+  "foundation",
+  "fsharp",
+  "fuelphp",
+  "gatsby",
+  "ghost",
+  "gin",
+  "giraffe",
+  "gleam",
+  "go",
+  "gorilla",
+  "gradio",
+  "grails",
+  "grape",
+  "graphql",
+  "grav",
+  "gridsome",
+  "groovy",
+  "grpc",
+  "grunt",
+  "gulp",
+  "hanami",
+  "handlebars",
+  "hapi",
+  "haskell",
+  "hasura",
+  "helidon",
+  "hexo",
+  "hono",
+  "hotwire",
+  "htmx",
+  "hugo",
+  "ihp",
+  "inferno",
+  "ionic",
+  "iris",
+  "jakarta-ee",
+  "jamstack",
+  "java",
+  "javalin",
+  "javascript",
+  "jekyll",
+  "jester",
+  "jfinal",
+  "jhipster",
+  "joomla",
+  "jquery",
+  "jsf",
+  "jsp",
+  "julia",
+  "kemal",
+  "keystonejs",
+  "kirby",
+  "knockout",
+  "koa",
+  "kohana",
+  "kotlin",
+  "ktor",
+  "laminas",
+  "lapis",
+  "laravel",
+  "leptos",
+  "liferay",
+  "lift",
+  "lit",
+  "litestar",
+  "lithium",
+  "loopback",
+  "lua",
+  "lucee",
+  "lucky",
+  "lumen",
+  "luminus",
+  "lustre",
+  "magento",
+  "marko",
+  "masonite",
+  "material-ui",
+  "materialize",
+  "mediawiki",
+  "mendix",
+  "meteor",
+  "mezzanine",
+  "micronaut",
+  "middleman",
+  "mithril",
+  "mkdocs",
+  "mojolicious",
+  "moodle",
+  "mustache",
+  "nancy",
+  "nestjs",
+  "nextjs",
+  "nicegui",
+  "nim",
+  "nodejs",
+  "nunjucks",
+  "nuxtjs",
+  "objective-c",
+  "ocaml",
+  "october-cms",
+  "opencart",
+  "openresty",
+  "openui5",
+  "orchard-core",
+  "outsystems",
+  "padrino",
+  "payload-cms",
+  "pelican",
+  "perl",
+  "phalcon",
+  "phoenix",
+  "phoenix-liveview",
+  "php",
+  "phpbb",
+  "play-framework",
+  "plone",
+  "pocketbase",
+  "polymer",
+  "preact",
+  "prestashop",
+  "pug",
+  "pyramid",
+  "python",
+  "quarkus",
+  "quart",
+  "qwik",
+  "qwik-city",
+  "r",
+  "r-shiny",
+  "rails",
+  "razor-pages",
+  "react",
+  "react-query",
+  "react-router",
+  "redwoodjs",
+  "reflex",
+  "remix",
+  "rest-api",
+  "restify",
+  "retool",
+  "revel",
+  "riot",
+  "robot-framework",
+  "rocket",
+  "roda",
+  "ruby",
+  "rust",
+  "sails",
+  "salesforce-commerce-cloud",
+  "sanic",
+  "sanity",
+  "scala",
+  "semantic-ui",
+  "servant",
+  "shadcn-ui",
+  "shopify",
+  "silverstripe",
+  "sinatra",
+  "slim",
+  "solidjs",
+  "solidstart",
+  "solidus",
+  "spark-java",
+  "spree",
+  "spring",
+  "spring-boot",
+  "squarespace",
+  "starlette",
+  "statamic",
+  "stencil",
+  "stimulus",
+  "strapi",
+  "streamlit",
+  "struts",
+  "supabase",
+  "svelte",
+  "sveltekit",
+  "swift",
+  "symfony",
+  "tailwindcss",
+  "tide",
+  "tornado",
+  "trpc",
+  "typescript",
+  "typo3",
+  "umbraco",
+  "v",
+  "vaadin",
+  "vapor",
+  "vertx",
+  "vite",
+  "vitepress",
+  "vuejs",
+  "vuepress",
+  "vuetify",
+  "vweb",
+  "wagtail",
+  "warp",
+  "wasp",
+  "web-components",
+  "web2py",
+  "webassembly",
+  "webflow",
+  "webpack",
+  "webpy",
+  "webrtc",
+  "websocket",
+  "wicket",
+  "wisp",
+  "wix",
+  "woocommerce",
+  "wordpress",
+  "wt",
+  "yesod",
+  "yew",
+  "yii",
+  "zend-framework",
+  "zig",
+  "zola"
+];
+function isFrameworkSlug(value) {
+  return typeof value === "string" && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(value);
+}
+
 // src/pagination.ts
 function toList(payload) {
   if (Array.isArray(payload)) return payload;
@@ -27340,20 +27659,25 @@ function domainsOf(item) {
 }
 function mapSite(domain, raw) {
   const site = { domain };
-  const name = valueOf(raw, "name");
   const typeObj = raw.type ?? {};
   const stack = valueOf(raw, "stack") ?? (typeof typeObj.slug === "string" ? typeObj.slug : void 0);
   const release = valueOf(raw, "current_release");
   const appRoot = valueOf(raw, "app_root_path");
   const port = valueOf(raw, "custom_port");
+  const framework = valueOf(raw, "framework");
   const temporary = valueOf(raw, "temporary_address") ?? (typeof raw.temporary_address === "string" && raw.temporary_address.trim() !== "" ? raw.temporary_address.trim() : void 0);
-  if (name) site.name = name;
   if (stack) site.stack = stack;
   if (release) site.current_release = release;
   if (appRoot) site.app_root_path = appRoot;
   if (port) site.custom_port = port;
+  if (framework) site.framework = framework;
   if (temporary) site.temporary_address = temporary;
   if (typeof raw.id === "string" || typeof raw.id === "number") site.id = raw.id;
+  const cert = raw.certificate ?? null;
+  const certStatus = cert ? { 1: "pending", 2: "valid" }[Number(cert.status)] : void 0;
+  if (certStatus === "valid" || certStatus === "pending") {
+    site.certificate = { status: certStatus, active: cert.is_active === true };
+  }
   const cloud = raw.cloud ?? {};
   const user = raw.user ?? {};
   const host = normalize(cloud.fqdn);
@@ -27373,9 +27697,8 @@ function mapSite(domain, raw) {
 function summarize(item, domains) {
   const summary = { domain: domains[0] };
   if (domains.length > 1) summary.other_domains = domains.slice(1);
-  const name = valueOf(item, "name");
   const stack = valueOf(item, "stack");
-  if (name) summary.name = name;
+  if (typeof item.id === "string" || typeof item.id === "number") summary.id = item.id;
   if (stack) summary.stack = stack;
   return summary;
 }
@@ -27399,7 +27722,44 @@ async function getSite(domain) {
     candidates: identified.map((entry) => summarize(entry.item, entry.domains))
   };
 }
+var CONFIGURABLE_SLUGS = ["app_root_path", "custom_port", "framework"];
+async function getSiteById(id) {
+  const numero = Number(id);
+  if (!Number.isInteger(numero) || numero <= 0) {
+    throw new ToolError("invalid_argument", `'${id}' n\xE3o \xE9 um id de site.`, {
+      hint: "O id \xE9 o n\xFAmero que o painel da Cloudez mostra para o site. Na d\xFAvida, busque pelo dom\xEDnio."
+    });
+  }
+  let item;
+  try {
+    item = await apiGet(sitePatchPath(numero));
+  } catch (err) {
+    if (err instanceof ToolError && err.body.error.code === "site_not_found") {
+      throw new ToolError("site_not_found", `Nenhum site com o id ${numero} nesta conta.`, {
+        hint: "Confira o id com o usu\xE1rio, ou busque pelo dom\xEDnio com cloudez_get_site."
+      });
+    }
+    throw err;
+  }
+  const [domain] = domainsOf(item);
+  if (!domain) {
+    throw new ToolError("upstream_unavailable", `A API devolveu o site ${numero} sem dom\xEDnio.`, {
+      retryable: false,
+      hint: "Confira o site no painel da Cloudez: sem dom\xEDnio n\xE3o h\xE1 onde publicar."
+    });
+  }
+  return { match: "exact", site: mapSite(domain, item), raw: item };
+}
+async function findSite(args) {
+  if (args.domain === void 0 === (args.id === void 0)) {
+    throw new ToolError("invalid_argument", "Passe o dom\xEDnio ou o id do site, e s\xF3 um deles.");
+  }
+  return args.id !== void 0 ? getSiteById(args.id) : getSite(args.domain);
+}
 async function configureSite(domain, desejado) {
+  if (desejado.framework !== void 0 && !isFrameworkSlug(desejado.framework)) {
+    throw invalidFramework(desejado.framework);
+  }
   const before = await getSite(domain);
   if (before.match !== "exact") {
     throw new ToolError("site_not_found", `Nenhum site com o dom\xEDnio '${domain}' nesta conta.`, {
@@ -27409,13 +27769,14 @@ async function configureSite(domain, desejado) {
   const site = before.site;
   const anterior = {
     app_root_path: site.app_root_path,
-    custom_port: site.custom_port
+    custom_port: site.custom_port,
+    framework: site.framework
   };
-  const pendentes = ["app_root_path", "custom_port"].filter(
+  const pendentes = CONFIGURABLE_SLUGS.filter(
     (slug) => desejado[slug] !== void 0 && desejado[slug] !== anterior[slug]
   );
   const resultado = { domain: site.domain, changed: [] };
-  for (const slug of ["app_root_path", "custom_port"]) {
+  for (const slug of CONFIGURABLE_SLUGS) {
     if (desejado[slug] !== void 0) resultado[slug] = desejado[slug];
   }
   if (pendentes.length === 0) return resultado;
@@ -27461,10 +27822,7 @@ async function configureSite(domain, desejado) {
   resultado.changed = [...pendentes];
   for (const slug of pendentes) {
     const antes = anterior[slug];
-    if (antes !== void 0) {
-      if (slug === "app_root_path") resultado.previous_app_root_path = antes;
-      else resultado.previous_custom_port = antes;
-    }
+    if (antes !== void 0) resultado[`previous_${slug}`] = antes;
   }
   return resultado;
 }
@@ -27497,6 +27855,11 @@ async function listSites(query) {
   }
   return result;
 }
+function invalidFramework(framework) {
+  return new ToolError("invalid_argument", `'${framework ?? ""}' n\xE3o \xE9 um slug de framework.`, {
+    hint: "Use o valor da lista que melhor descreve a tecnologia do projeto. Se nenhum servir, escreva o nome dela em slug: min\xFAsculas, n\xFAmeros e h\xEDfen, como 'Next.JS' vira 'nextjs'."
+  });
+}
 async function createSite(args) {
   const domain = normalizeHost(args.domain);
   if (!domain) {
@@ -27510,11 +27873,19 @@ async function createSite(args) {
       hint: "O id vem de cloudez_list_clouds, ou do campo cloud.id de cloudez_setup_trial_cloud."
     });
   }
+  if (!isFrameworkSlug(args.framework)) throw invalidFramework(args.framework);
   let criado;
   try {
     criado = await apiPost(
       websiteCreatePath(),
-      { cloud, type: APP_STACK, values: [{ slug: "domain", value: domain }] },
+      {
+        cloud,
+        type: APP_STACK,
+        values: [
+          { slug: "domain", value: domain },
+          { slug: "framework", value: args.framework }
+        ]
+      },
       websiteCreateTimeoutMs()
     );
   } catch (err) {
@@ -28551,6 +28922,67 @@ ${prova.stderr}`.trim();
   };
 }
 
+// src/certificates.ts
+var STATUS_VALID = 2;
+async function requestCertificate(domain) {
+  const found = await getSite(domain);
+  if (found.match !== "exact") {
+    throw new ToolError("site_not_found", `Nenhum site com o dom\xEDnio exato '${domain}' nesta conta.`, {
+      hint: "O certificado pertence a um site: sem o site n\xE3o h\xE1 para que emiti-lo."
+    });
+  }
+  const raw = found.raw;
+  const website = Number(raw.id);
+  if (!idValido2(website)) {
+    throw new ToolError("upstream_unavailable", "O site n\xE3o trouxe um id utiliz\xE1vel.", {
+      retryable: false,
+      hint: "Sem ele n\xE3o d\xE1 para pedir o certificado. Confira o retorno de cloudez_get_site."
+    });
+  }
+  const hosted = raw.is_hosted === true;
+  const cert = raw.certificate ?? null;
+  if (cert && cert.is_active === true && Number(cert.status) === STATUS_VALID) {
+    return {
+      domain: found.site.domain,
+      status: "already_active",
+      ...idValido2(cert.id) ? { certificate_id: Number(cert.id) } : {},
+      hosted,
+      summary: "O HTTPS j\xE1 est\xE1 ativo neste site \u2014 o certificado est\xE1 emitido e v\xE1lido."
+    };
+  }
+  const resultado = idValido2(cert?.id) ? {
+    domain: found.site.domain,
+    status: "requeued",
+    certificate_id: Number(cert.id),
+    hosted,
+    summary: "O pedido de certificado que j\xE1 existia foi reenfileirado."
+  } : {
+    domain: found.site.domain,
+    status: "requested",
+    hosted,
+    summary: "O certificado foi pedido. A emiss\xE3o leva alguns minutos."
+  };
+  if (resultado.status === "requeued") {
+    await apiPost(certificateRequeuePath(resultado.certificate_id), {});
+  } else {
+    const criado = await apiPost(certificatePath(), {
+      website,
+      // Único provider que a API enfileira para emissão automática. Ver A-HTTPS no contrato.
+      provider: CERTIFICATE_PROVIDER_CLOUDEZ_LE
+    });
+    if (idValido2(criado?.id)) resultado.certificate_id = Number(criado.id);
+  }
+  resultado.note = hosted ? "A emiss\xE3o \xE9 ass\xEDncrona: o HTTPS passa a valer alguns minutos depois, sem mais nenhum passo. N\xE3o diga ao usu\xE1rio que o HTTPS j\xE1 est\xE1 ativo \u2014 confirme depois com cloudez_get_site." : "O dom\xEDnio ainda n\xE3o aponta para a Cloudez, ent\xE3o este pedido fica registrado mas N\xC3O entra na fila de emiss\xE3o \u2014 e, enquanto ele estiver pendente, a Cloudez tamb\xE9m n\xE3o pede sozinha. Depois que o DNS apontar, chame esta tool de novo: ela reenfileira o pedido, que \xE9 o que destrava a emiss\xE3o. Confira o DNS com cloudez_check_dns.";
+  if (!hosted) {
+    resultado.summary = resultado.status === "requeued" ? "O pedido foi reenfileirado, mas s\xF3 ser\xE1 emitido quando o dom\xEDnio apontar para a Cloudez." : "O certificado foi pedido, mas s\xF3 ser\xE1 emitido quando o dom\xEDnio apontar para a Cloudez.";
+  }
+  return resultado;
+}
+function idValido2(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0;
+}
+
 // src/crons.ts
 var CAMPOS = [
   { chave: "minute", nome: "minuto", min: 0, max: 59 },
@@ -28587,7 +29019,7 @@ async function createCron(args) {
     });
   }
   const website = Number(found.raw?.id);
-  if (!idValido2(website)) {
+  if (!idValido3(website)) {
     throw new ToolError("upstream_unavailable", "O site n\xE3o trouxe um id utiliz\xE1vel.", {
       hint: "Sem ele n\xE3o d\xE1 para criar o cron. Confira o retorno de cloudez_get_site."
     });
@@ -28599,16 +29031,16 @@ async function createCron(args) {
     ...tempo
   });
   return {
-    ...idValido2(criado?.id) ? { id: Number(criado.id) } : {},
+    ...idValido3(criado?.id) ? { id: Number(criado.id) } : {},
     website,
     name: args.name,
     command: args.command,
     schedule: CAMPOS.map((c) => tempo[c.chave]).join(" "),
     // A API pode devolver 201 com um corpo que não repete o que foi enviado.
-    raw_ok: idValido2(criado?.id)
+    raw_ok: idValido3(criado?.id)
   };
 }
-function idValido2(v) {
+function idValido3(v) {
   const n = Number(v);
   return Number.isInteger(n) && n > 0;
 }
@@ -29391,19 +29823,60 @@ function reconhecerRecusaDoCloud(err) {
   }
   return err;
 }
-async function listClouds() {
-  const payload = await apiGet(`${cloudListPath()}?page_size=20`);
-  const clouds = toList(payload).filter((c) => Number.isInteger(Number(c.id)) && Number(c.id) > 0).map((c) => ({
+var isCloudId = (id) => Number.isInteger(Number(id)) && Number(id) > 0;
+function mapCloud(c) {
+  return {
     id: Number(c.id),
     name: typeof c.nickname === "string" && c.nickname || typeof c.name === "string" && c.name || `cloud ${c.id}`,
     ...typeof c.fqdn === "string" && c.fqdn ? { fqdn: c.fqdn } : {},
     ...typeof c.is_default === "boolean" ? { is_default: c.is_default } : {},
     ...Array.isArray(c.websites) ? { websites_count: c.websites.length } : {}
-  }));
-  return {
-    clouds,
-    ...nextPath(payload) ? { truncated: "H\xE1 mais clouds do que esta p\xE1gina trouxe. Pe\xE7a um nome mais espec\xEDfico ou confira no painel." } : {}
   };
+}
+async function listClouds(args = {}) {
+  if (args.query !== void 0 && args.id !== void 0) {
+    throw new ToolError("invalid_argument", "Passe o termo de busca ou o id da cloud, e s\xF3 um deles.");
+  }
+  if (args.id !== void 0) return { clouds: [await getCloud(args.id)] };
+  const termo = args.query?.trim().toLowerCase();
+  if (termo === "") {
+    throw new ToolError("invalid_argument", "O termo de busca est\xE1 vazio.", {
+      hint: "Passe parte do fqdn ou do apelido da cloud, ou chame sem `query` para a primeira p\xE1gina."
+    });
+  }
+  const clouds = [];
+  const params = new URLSearchParams({ page_size: "20", ...termo ? { search: termo } : {} });
+  let path = `${cloudListPath()}?${params}`;
+  const maxPages = termo ? MAX_CLOUD_PAGES : 1;
+  let pages = 0;
+  while (path && pages < maxPages) {
+    const payload = await apiGet(path);
+    pages += 1;
+    clouds.push(...toList(payload).filter((c) => isCloudId(c.id)).map(mapCloud));
+    path = nextPath(payload);
+  }
+  const result = { ...termo ? { query: termo } : {}, clouds };
+  if (path) {
+    result.truncated = termo ? "H\xE1 mais clouds com esse termo do que a busca trouxe. Pe\xE7a um termo mais espec\xEDfico ou o id da cloud." : "H\xE1 mais clouds do que esta p\xE1gina trouxe. Busque com parte do fqdn em `query`, ou pe\xE7a o id da cloud.";
+  }
+  return result;
+}
+async function getCloud(id) {
+  if (!isCloudId(id)) {
+    throw new ToolError("invalid_argument", `'${id}' n\xE3o \xE9 um id de cloud.`, {
+      hint: "O id \xE9 o n\xFAmero do endere\xE7o da cloud no painel, em /clouds/<id>. Na d\xFAvida, busque pelo fqdn."
+    });
+  }
+  try {
+    return mapCloud(await apiGet(cloudPath(id)));
+  } catch (err) {
+    if (err instanceof ToolError && err.body.error.code === "site_not_found") {
+      throw new ToolError("cloud_not_found", `Nenhuma cloud com o id ${id} nesta conta.`, {
+        hint: "Confira o id com o usu\xE1rio, ou busque pelo fqdn com cloudez_list_clouds(query)."
+      });
+    }
+    throw err;
+  }
 }
 
 // src/panel-host-store.ts
@@ -29455,9 +29928,10 @@ async function resolvePanelHosts() {
 }
 
 // src/index.ts
+var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, em slug. Use o valor da lista que melhor a descreve, preferindo o framework \xE0 linguagem (nextjs a nodejs, django a python). Se nenhum servir, escreva o nome dela em slug, como 'Next.JS' vira 'nextjs'. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.1.24"
+  version: "0.2.23"
 });
 server.registerTool(
   "cloudez_auth_status",
@@ -29528,15 +30002,16 @@ server.registerTool(
   "cloudez_get_site",
   {
     title: "Detalhes de um site da conta",
-    description: "Busca um site da conta Cloudez pelo dom\xEDnio. Chame ANTES de criar um .cloudez.yaml para confirmar que o dom\xEDnio existe na conta \u2014 um dom\xEDnio com typo aceito aqui vira um deploy que falha longe da causa. Devolve match:'exact' com os dados do site, ou match:'candidates' com os sites parecidos quando n\xE3o h\xE1 casamento perfeito \u2014 nesse caso N\xC3O escolha por conta pr\xF3pria, liste os candidatos e pergunte ao usu\xE1rio qual \xE9 o dele. Falha com site_not_found quando a busca n\xE3o devolve nada. Exige autentica\xE7\xE3o: se falhar com not_authenticated, conduza o /cloudez:login antes de tentar de novo.",
+    description: "Busca um site da conta Cloudez pelo dom\xEDnio ou pelo id, quando o usu\xE1rio der o id no lugar do dom\xEDnio. Passe um dos dois, nunca os dois. Chame ANTES de criar um .cloudez.yaml para confirmar que o dom\xEDnio existe na conta \u2014 um dom\xEDnio com typo aceito aqui vira um deploy que falha longe da causa. Devolve match:'exact' com os dados do site, ou match:'candidates' com os sites parecidos quando n\xE3o h\xE1 casamento perfeito \u2014 nesse caso N\xC3O escolha por conta pr\xF3pria, liste os candidatos e pergunte ao usu\xE1rio qual \xE9 o dele. Falha com site_not_found quando a busca n\xE3o devolve nada. Exige autentica\xE7\xE3o: se falhar com not_authenticated, conduza o /cloudez:login antes de tentar de novo.",
     inputSchema: object({
-      domain: string2().describe("FQDN do site, sem protocolo nem caminho. Ex.: meusite.com.br")
+      domain: string2().optional().describe("FQDN do site, sem protocolo nem caminho. Ex.: meusite.com.br"),
+      id: number2().optional().describe("Id do site na Cloudez, no lugar do dom\xEDnio. O resultado \xE9 sempre exato.")
     }),
     annotations: { readOnlyHint: true, openWorldHint: true }
   },
-  async ({ domain }) => {
+  async ({ domain, id }) => {
     try {
-      return okResult({ ...await getSite(domain) });
+      return okResult({ ...await findSite({ domain, id }) });
     } catch (err) {
       return errorResult(err);
     }
@@ -29546,16 +30021,17 @@ server.registerTool(
   "cloudez_create_site",
   {
     title: "Criar um site novo (tipo Claude) numa cloud",
-    description: "Cria um site novo na conta Cloudez, sempre do tipo claude \u2014 n\xE3o pergunte o tipo, \xE9 sempre esse. Chame quando cloudez_get_site n\xE3o encontrar o dom\xEDnio e o usu\xE1rio confirmar que quer criar um site ali, ou logo depois de cloudez_setup_trial_cloud numa conta que ainda n\xE3o tem nenhum site. Use cloudez_list_clouds para escolher o `cloud`, ou o cloud.id que cloudez_setup_trial_cloud devolveu. N\xC3O chame de novo se falhar: o dom\xEDnio pode j\xE1 existir NAQUELA cloud, e repetir sem confirmar o dado com o usu\xE1rio s\xF3 produz o mesmo erro.",
+    description: "Cria um site novo na conta Cloudez, sempre do tipo claude \u2014 n\xE3o pergunte o tipo, \xE9 sempre esse. Chame quando cloudez_get_site n\xE3o encontrar o dom\xEDnio e o usu\xE1rio confirmar que quer criar um site ali, ou logo depois de cloudez_setup_trial_cloud numa conta que ainda n\xE3o tem nenhum site. Use cloudez_list_clouds para escolher o `cloud`, ou o cloud.id que cloudez_setup_trial_cloud devolveu. N\xC3O chame de novo se falhar: o dom\xEDnio pode j\xE1 existir NAQUELA cloud, e repetir sem confirmar o dado com o usu\xE1rio s\xF3 produz o mesmo erro. O `framework` \xE9 escolhido por voc\xEA, lendo o projeto: n\xE3o pergunte ao usu\xE1rio o que o c\xF3digo responde.",
     inputSchema: object({
       cloud: number2().describe("Id da cloud onde criar o site. Vem de cloudez_list_clouds ou cloudez_setup_trial_cloud."),
-      domain: string2().describe("FQDN da aplica\xE7\xE3o, sem protocolo nem caminho. Ex.: meusite.com.br")
+      domain: string2().describe("FQDN da aplica\xE7\xE3o, sem protocolo nem caminho. Ex.: meusite.com.br"),
+      framework: string2().describe(FRAMEWORK_DESCRIPTION)
     }),
     annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: true }
   },
-  async ({ cloud, domain }) => {
+  async ({ cloud, domain, framework }) => {
     try {
-      return okResult({ ...await createSite({ cloud, domain }) });
+      return okResult({ ...await createSite({ cloud, domain, framework }) });
     } catch (err) {
       return errorResult(err);
     }
@@ -29564,18 +30040,37 @@ server.registerTool(
 server.registerTool(
   "cloudez_configure_site",
   {
-    title: "Ajustar document root e porta do site na Cloudez",
-    description: `Ajusta na Cloudez os dois valores de que o deploy deste plugin depende, numa escrita s\xF3: o app_root_path (diret\xF3rio que o servidor web entrega, precisa valer '${EXPECTED_APP_ROOT_PATH}') e a custom_port (porta do host para onde o nginx encaminha '/', precisa valer '${DEFAULT_CUSTOM_PORT}'). Passe s\xF3 o que quiser alterar; o que j\xE1 estiver correto n\xE3o gasta escrita. Chame S\xD3 depois de o usu\xE1rio aceitar explicitamente: mudar o document root altera o que o site serve, e um site apontado para um diret\xF3rio ainda vazio fica fora do ar at\xE9 o primeiro deploy. Se falhar dizendo que o valor n\xE3o mudou, n\xE3o afirme ao usu\xE1rio que a configura\xE7\xE3o foi ajustada, e n\xE3o fa\xE7a deploy contando com isso.`,
+    title: "Ajustar document root, porta e framework do site na Cloudez",
+    description: `Ajusta na Cloudez os dois valores de que o deploy deste plugin depende, numa escrita s\xF3: o app_root_path (diret\xF3rio que o servidor web entrega, precisa valer '${EXPECTED_APP_ROOT_PATH}') e a custom_port (porta do host para onde o nginx encaminha '/', precisa valer '${DEFAULT_CUSTOM_PORT}'). Tamb\xE9m grava o framework, quando o site ainda n\xE3o o tem ou ele n\xE3o descreve mais o projeto. Passe s\xF3 o que quiser alterar; o que j\xE1 estiver correto n\xE3o gasta escrita. Chame S\xD3 depois de o usu\xE1rio aceitar explicitamente: mudar o document root altera o que o site serve, e um site apontado para um diret\xF3rio ainda vazio fica fora do ar at\xE9 o primeiro deploy. Se falhar dizendo que o valor n\xE3o mudou, n\xE3o afirme ao usu\xE1rio que a configura\xE7\xE3o foi ajustada, e n\xE3o fa\xE7a deploy contando com isso.`,
     inputSchema: object({
       domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml"),
       app_root_path: string2().optional().describe(`Novo document root, relativo a ~/<domain>/www. Normalmente '${EXPECTED_APP_ROOT_PATH}'.`),
-      custom_port: string2().optional().describe(`Porta do host que o nginx encaminha para '/'. Neste plugin, sempre '${DEFAULT_CUSTOM_PORT}'.`)
+      custom_port: string2().optional().describe(`Porta do host que o nginx encaminha para '/'. Neste plugin, sempre '${DEFAULT_CUSTOM_PORT}'.`),
+      framework: string2().optional().describe(`${FRAMEWORK_DESCRIPTION} S\xF3 existe no tipo claude.`)
     }),
     annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true }
   },
-  async ({ domain, app_root_path, custom_port }) => {
+  async ({ domain, app_root_path, custom_port, framework }) => {
     try {
-      return okResult({ ...await configureSite(domain, { app_root_path, custom_port }) });
+      return okResult({ ...await configureSite(domain, { app_root_path, custom_port, framework }) });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+server.registerTool(
+  "cloudez_request_certificate",
+  {
+    title: "Pedir a emiss\xE3o do certificado HTTPS do site",
+    description: "Pede \xE0 Cloudez a emiss\xE3o do certificado HTTPS de um site. N\xC3O chame por iniciativa pr\xF3pria depois de criar um site ou fazer um deploy: a Cloudez pede o certificado sozinha assim que o dom\xEDnio passa a apontar para ela, e repete o pedido enquanto n\xE3o houver um. N\xE3o existe passo manual de 'ativar o HTTPS' \u2014 nunca diga ao usu\xE1rio que ele precisa ativar. Chame s\xF3 quando o usu\xE1rio pedir a emiss\xE3o explicitamente, ou quando ele relatar site sem HTTPS muito tempo depois de o DNS j\xE1 apontar. N\xE3o escreve nada quando o certificado j\xE1 est\xE1 ativo. Quando um pedido j\xE1 existe, reenfileira esse \u2014 que \xE9 o que destrava um pedido feito antes de o DNS apontar. A emiss\xE3o \xE9 ass\xEDncrona e leva minutos: o retorno diz que o pedido saiu, nunca que o HTTPS j\xE1 est\xE1 valendo. Confirme depois com cloudez_get_site.",
+    inputSchema: object({
+      domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml")
+    }),
+    annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true }
+  },
+  async ({ domain }) => {
+    try {
+      return okResult({ ...await requestCertificate(domain) });
     } catch (err) {
       return errorResult(err);
     }
@@ -30045,13 +30540,16 @@ server.registerTool(
   "cloudez_list_clouds",
   {
     title: "Listar as clouds (servidores) da conta",
-    description: "Lista as clouds da conta autenticada, para escolher onde criar um site com cloudez_create_site. Chame quando a conta puder ter mais de uma \u2014 uma conta com cloud s\xF3 n\xE3o precisa perguntar, use o `id` dela direto.",
-    inputSchema: object({}),
+    description: "Lista as clouds da conta autenticada, para escolher onde criar um site com cloudez_create_site. Chame quando a conta puder ter mais de uma \u2014 uma conta com cloud s\xF3 n\xE3o precisa perguntar, use o `id` dela direto. Sem argumento, devolve a primeira p\xE1gina. Quando o usu\xE1rio citar uma cloud, passe parte do fqdn ou do apelido em `query`, ou o n\xFAmero dela em `id`: a busca \xE9 da API e alcan\xE7a clouds fora da primeira p\xE1gina, inclusive as sem site.",
+    inputSchema: object({
+      query: string2().optional().describe("Parte do fqdn, do apelido ou do IP da cloud. Ex.: configrsys03"),
+      id: number2().optional().describe("Id da cloud, o n\xFAmero em /clouds/<id> no painel.")
+    }),
     annotations: { readOnlyHint: true, openWorldHint: true }
   },
-  async () => {
+  async ({ query, id }) => {
     try {
-      return okResult({ ...await listClouds() });
+      return okResult({ ...await listClouds({ query, id }) });
     } catch (err) {
       return errorResult(err);
     }

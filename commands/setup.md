@@ -1,6 +1,6 @@
 ---
 description: Cria o .cloudez.yaml do projeto para um domínio e environment, se ainda não existir
-argument-hint: <domain> <environment> [--database cloudez|docker]
+argument-hint: <domain|id> <environment> [--cloud id|fqdn] [--database cloudez|docker]
 allowed-tools: mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_list_sites, mcp__cloudez__cloudez_list_clouds, mcp__cloudez__cloudez_create_site, mcp__cloudez__cloudez_configure_site, mcp__cloudez__cloudez_authorize_ssh_key, mcp__cloudez__cloudez_find_compose, mcp__cloudez__cloudez_list_local_ssh_keys, Bash(cloudez-setup:*), Read, AskUserQuestion
 ---
 
@@ -22,7 +22,12 @@ Nunca peça o token na conversa.
 
 ## 1. Domínio
 
-Argumentos recebidos: `$ARGUMENTS` — o domínio e o environment, nessa ordem.
+Argumentos recebidos: `$ARGUMENTS` — o domínio e o environment, nessa ordem, e
+opcionalmente `--cloud`, usado só se for preciso criar o site.
+
+**No lugar do domínio, o usuário pode dar o ID do site**, um número inteiro. Nesse
+caso o passo 2 busca pelo ID, e dali em diante vale o `domain` que o site
+devolver: é ele que vai para o `.cloudez.yaml`.
 
 Comece pelo domínio, sozinho. Pergunte em texto livre, propondo um valor se o
 projeto der pista dele (README, `package.json`, config de CI). Tem que ser um
@@ -35,17 +40,21 @@ descartada.
 ## 2. Confirmar o site na conta
 
 ```
-cloudez_get_site(domain: "<domain>")
+cloudez_get_site(domain: "<domain>")   # ou cloudez_get_site(id: <id>)
 ```
+
+Pelo ID o resultado é sempre `exact`, ou `site_not_found`. Neste último, não há
+site a criar a partir de um ID: pergunte ao usuário o domínio, ou confira o ID com
+ele.
 
 A busca não é exata do lado da API: ela pode trazer domínios vizinhos. Por isso há
 três desfechos, e **em nenhum deles você segue sozinho**.
 
 ### `match: "exact"` — achou
 
-Diga que encontrou, mostrando o `domain` e o que mais veio (`name`, `stack`,
-`ssh.host`). **Peça confirmação ao usuário e espere a resposta** antes de ir para
-o passo 3.
+Diga que encontrou, mostrando o `id` e o `domain`, que são o que identifica o
+site na Cloudez, e o que mais veio (`stack`, `ssh.host`). **Peça confirmação ao
+usuário e espere a resposta** antes de ir para o passo 3.
 
 Parece redundante confirmar um casamento exato, e não é: o domínio pode estar
 certo e ser o projeto errado — a mesma conta hospeda vários sites, e este é o
@@ -56,7 +65,7 @@ própria: pergunte o domínio correto e volte ao passo 1.
 
 ### `match: "candidates"` — não achou exato, mas achou parecidos
 
-**Liste os candidatos**, mostrando o `domain` de cada um — e também os de
+**Liste os candidatos**, mostrando o `id` e o `domain` de cada um — e também os de
 `other_domains`, quando vierem: o site é conhecido por mais de um domínio, e o
 usuário pode reconhecê-lo por qualquer um deles. Use AskUserQuestion quando forem
 poucos, com uma opção por site, e pergunte se o site dele é algum daqueles.
@@ -109,6 +118,23 @@ não foi possível confirmar agora e pergunte se ele quer tentar de novo.
 Chegou aqui porque o usuário confirmou que quer um site novo, com o domínio do
 passo 1 — não algo que ele precise fazer no painel primeiro.
 
+**Veio `--cloud`, ou o usuário já disse a cloud?** Busque por ela em vez de
+listar, porque a listagem traz só a primeira página e a cloud dele pode estar
+fora dela:
+
+```
+cloudez_list_clouds(id: <número>)          # quando ele deu o id
+cloudez_list_clouds(query: "<trecho>")     # quando deu o fqdn, parte dele ou o apelido
+```
+
+- **Uma cloud** — use o `id` dela, sem perguntar;
+- **Mais de uma** — o trecho casou com várias. Pergunte qual, como no caso
+  "Mais de uma" abaixo;
+- **Nenhuma, ou `cloud_not_found`** — diga isso ao usuário e siga pela listagem
+  abaixo.
+
+Sem cloud indicada, liste:
+
 ```
 cloudez_list_clouds()
 ```
@@ -118,19 +144,29 @@ cloudez_list_clouds()
   sai do `/cloudez:login` com uma (`cloudez_setup_trial_cloud`);
 - **Uma cloud só** — use o `id` dela direto, sem perguntar: não há entre o quê
   escolher;
-- **Mais de uma** — pergunte qual com AskUserQuestion, mostrando `name` e
+- **Mais de uma** — pergunte qual com AskUserQuestion, mostrando `id`, `name` e
   `fqdn` de cada uma, e acrescente "contratar uma nova" como opção — o usuário
-  pode querer uma cloud separada mesmo já tendo outras.
+  pode querer uma cloud separada mesmo já tendo outras. Ele pode responder com o
+  `id` ou o `fqdn`. Se vier `truncated`, diga que há mais clouds e que ele pode
+  citar a dele pelo `id` ou por parte do `fqdn`, e busque como acima.
 
 Se ele escolher "contratar uma nova", vá para "Contratar uma cloud nova",
 abaixo. Do contrário, com o `id` escolhido:
 
 ```
-cloudez_create_site(cloud: <id>, domain: "<domain do passo 1>")
+cloudez_create_site(cloud: <id>, domain: "<domain do passo 1>", framework: "<slug>")
 ```
 
 **Não pergunte o tipo do site.** É sempre `claude` — o único que este plugin
 publica — e a tool não aceita outro.
+
+**O `framework` é você quem escolhe, lendo o projeto.** Use o valor da lista da
+tool que melhor descreve a tecnologia, preferindo o framework à linguagem:
+`nextjs` e não `nodejs`, `django` e não `python`. O `package.json`, o
+`requirements.txt`, o `composer.json` e afins costumam responder. Se a
+tecnologia não estiver na lista, escreva o nome dela em slug: minúsculas,
+números e hífen, como "Next.JS" vira `nextjs`. Só pergunte ao usuário quando o
+projeto ainda não tiver código que diga a tecnologia.
 
 O domínio é único **por cloud**, não por conta: se vier `invalid_argument`
 dizendo que o domínio já existe, é porque já há um site com ele **naquela
@@ -142,6 +178,11 @@ prática: criar o site demora, e um timeout não significa que nada foi criado).
 **Não chame `cloudez_create_site` de novo agora.** Chame `cloudez_get_site`
 com o mesmo domínio primeiro: se o site já aparecer lá, trate como sucesso e
 siga para o passo 3; só repita a criação se ele realmente não existir.
+
+**Não diga que falta ativar o HTTPS, nem ofereça fazê-lo.** O certificado é
+emitido pela Cloudez sozinha quando o domínio passar a apontar para ela, e não há
+passo de ativação — nem aqui, nem no painel. Se o usuário perguntar, é isso que
+se responde.
 
 Com o site criado, siga para o passo 3 com o `domain` que a tool devolveu. O
 retorno de `cloudez_create_site` tem a MESMA forma do `cloudez_get_site` —
@@ -203,7 +244,8 @@ estava em `www`, e o deploy parece não ter efeito.
 **O `database:` fica para depois.** Ele registra onde o banco de produção mora —
 `cloudez` para a instância gerenciada, `docker` para o container com volume
 nomeado — e a escolha é do `/cloudez:compose`, que é onde o usuário a faz. Não
-pergunte aqui: seria decidir antes de saber se a aplicação precisa de banco.
+pergunte aqui: seria decidir antes de saber se a aplicação precisa de banco, e de
+qual engine, que é o que decide a recomendação.
 
 **Não há mais nada para o usuário preencher.** O arquivo sai completo: nem o
 destino ssh nem o diretório do servidor moram nele — vem do `cloudez_get_site` a cada deploy, e o `/cloudez:deploy`
@@ -261,6 +303,11 @@ ainda não ter Compose nenhum — então:
   `custom_port` tem de valer exatamente esse número;
 - **não tem**: use **3000**, que é o que o `/cloudez:compose` vai escrever depois.
 
+**O `framework`** descreve a tecnologia da aplicação e só existe no tipo `claude`.
+Se o `cloudez_get_site` não o trouxer, ou trouxer um que não descreve mais o
+projeto, escolha o valor como no passo 2 e inclua-o na mesma chamada abaixo. Ele
+não muda o que o site serve, então não pede o aviso dos outros dois.
+
 **Se os dois já estiverem certos**, diga que está tudo certo e siga.
 
 **Se algum estiver diferente** — inclusive ausente — explique em termos do que vai
@@ -289,7 +336,8 @@ passaria a ser. Duas coisas que ele precisa saber para decidir:
 cloudez_configure_site(
   domain: "<domain>",
   app_root_path: "claude/current",
-  custom_port: "<3000, ou a porta que o Compose publica>"
+  custom_port: "<3000, ou a porta que o Compose publica>",
+  framework: "<slug, se faltar ou estiver desatualizado>"
 )
 ```
 
