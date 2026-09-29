@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.22 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.23 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -27028,6 +27028,10 @@ var CERTIFICATE_PROVIDER_CLOUDEZ_LE = 4;
 function cloudListPath() {
   return process.env.CLOUDEZ_API_CLOUD_LIST_PATH || "/v3/cloud/";
 }
+function cloudPath(id) {
+  return `${cloudListPath().replace(/\/+$/, "")}/${encodeURIComponent(String(id))}/`;
+}
+var MAX_CLOUD_PAGES = 5;
 function cloudUserPatchPath(id) {
   const template = process.env.CLOUDEZ_API_CLOUD_USER_PATCH_PATH || "/v3/cloud-user/{id}/";
   return template.replace("{id}", encodeURIComponent(String(id)));
@@ -29819,19 +29823,60 @@ function reconhecerRecusaDoCloud(err) {
   }
   return err;
 }
-async function listClouds() {
-  const payload = await apiGet(`${cloudListPath()}?page_size=20`);
-  const clouds = toList(payload).filter((c) => Number.isInteger(Number(c.id)) && Number(c.id) > 0).map((c) => ({
+var isCloudId = (id) => Number.isInteger(Number(id)) && Number(id) > 0;
+function mapCloud(c) {
+  return {
     id: Number(c.id),
     name: typeof c.nickname === "string" && c.nickname || typeof c.name === "string" && c.name || `cloud ${c.id}`,
     ...typeof c.fqdn === "string" && c.fqdn ? { fqdn: c.fqdn } : {},
     ...typeof c.is_default === "boolean" ? { is_default: c.is_default } : {},
     ...Array.isArray(c.websites) ? { websites_count: c.websites.length } : {}
-  }));
-  return {
-    clouds,
-    ...nextPath(payload) ? { truncated: "H\xE1 mais clouds do que esta p\xE1gina trouxe. Pe\xE7a um nome mais espec\xEDfico ou confira no painel." } : {}
   };
+}
+async function listClouds(args = {}) {
+  if (args.query !== void 0 && args.id !== void 0) {
+    throw new ToolError("invalid_argument", "Passe o termo de busca ou o id da cloud, e s\xF3 um deles.");
+  }
+  if (args.id !== void 0) return { clouds: [await getCloud(args.id)] };
+  const termo = args.query?.trim().toLowerCase();
+  if (termo === "") {
+    throw new ToolError("invalid_argument", "O termo de busca est\xE1 vazio.", {
+      hint: "Passe parte do fqdn ou do apelido da cloud, ou chame sem `query` para a primeira p\xE1gina."
+    });
+  }
+  const clouds = [];
+  const params = new URLSearchParams({ page_size: "20", ...termo ? { search: termo } : {} });
+  let path = `${cloudListPath()}?${params}`;
+  const maxPages = termo ? MAX_CLOUD_PAGES : 1;
+  let pages = 0;
+  while (path && pages < maxPages) {
+    const payload = await apiGet(path);
+    pages += 1;
+    clouds.push(...toList(payload).filter((c) => isCloudId(c.id)).map(mapCloud));
+    path = nextPath(payload);
+  }
+  const result = { ...termo ? { query: termo } : {}, clouds };
+  if (path) {
+    result.truncated = termo ? "H\xE1 mais clouds com esse termo do que a busca trouxe. Pe\xE7a um termo mais espec\xEDfico ou o id da cloud." : "H\xE1 mais clouds do que esta p\xE1gina trouxe. Busque com parte do fqdn em `query`, ou pe\xE7a o id da cloud.";
+  }
+  return result;
+}
+async function getCloud(id) {
+  if (!isCloudId(id)) {
+    throw new ToolError("invalid_argument", `'${id}' n\xE3o \xE9 um id de cloud.`, {
+      hint: "O id \xE9 o n\xFAmero do endere\xE7o da cloud no painel, em /clouds/<id>. Na d\xFAvida, busque pelo fqdn."
+    });
+  }
+  try {
+    return mapCloud(await apiGet(cloudPath(id)));
+  } catch (err) {
+    if (err instanceof ToolError && err.body.error.code === "site_not_found") {
+      throw new ToolError("cloud_not_found", `Nenhuma cloud com o id ${id} nesta conta.`, {
+        hint: "Confira o id com o usu\xE1rio, ou busque pelo fqdn com cloudez_list_clouds(query)."
+      });
+    }
+    throw err;
+  }
 }
 
 // src/panel-host-store.ts
@@ -29886,7 +29931,7 @@ async function resolvePanelHosts() {
 var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, em slug. Use o valor da lista que melhor a descreve, preferindo o framework \xE0 linguagem (nextjs a nodejs, django a python). Se nenhum servir, escreva o nome dela em slug, como 'Next.JS' vira 'nextjs'. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.2.22"
+  version: "0.2.23"
 });
 server.registerTool(
   "cloudez_auth_status",
@@ -30495,13 +30540,16 @@ server.registerTool(
   "cloudez_list_clouds",
   {
     title: "Listar as clouds (servidores) da conta",
-    description: "Lista as clouds da conta autenticada, para escolher onde criar um site com cloudez_create_site. Chame quando a conta puder ter mais de uma \u2014 uma conta com cloud s\xF3 n\xE3o precisa perguntar, use o `id` dela direto.",
-    inputSchema: object({}),
+    description: "Lista as clouds da conta autenticada, para escolher onde criar um site com cloudez_create_site. Chame quando a conta puder ter mais de uma \u2014 uma conta com cloud s\xF3 n\xE3o precisa perguntar, use o `id` dela direto. Sem argumento, devolve a primeira p\xE1gina. Quando o usu\xE1rio citar uma cloud, passe parte do fqdn ou do apelido em `query`, ou o n\xFAmero dela em `id`: a busca \xE9 da API e alcan\xE7a clouds fora da primeira p\xE1gina, inclusive as sem site.",
+    inputSchema: object({
+      query: string2().optional().describe("Parte do fqdn, do apelido ou do IP da cloud. Ex.: configrsys03"),
+      id: number2().optional().describe("Id da cloud, o n\xFAmero em /clouds/<id> no painel.")
+    }),
     annotations: { readOnlyHint: true, openWorldHint: true }
   },
-  async () => {
+  async ({ query, id }) => {
     try {
-      return okResult({ ...await listClouds() });
+      return okResult({ ...await listClouds({ query, id }) });
     } catch (err) {
       return errorResult(err);
     }

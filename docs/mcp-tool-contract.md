@@ -1627,11 +1627,18 @@ criar — quem chama confirma com o usuário antes de repetir.
 ### 3.22 `cloudez_list_clouds` — read-only
 
 Lista as clouds (servidores, model `Node` na API) da conta autenticada, para
-escolher o `cloud` de `cloudez_create_site` (§3.21).
+escolher o `cloud` de `cloudez_create_site` (§3.21). Sem argumento devolve a
+primeira página. Com `query` ou `id`, busca uma cloud específica, um dos dois e
+nunca os dois.
 
 ```jsonc
 // input
-{ "type": "object", "properties": {}, "additionalProperties": false }
+{ "type": "object",
+  "properties": {
+    "query": { "type": "string", "description": "Parte do fqdn, do apelido ou do IP" },
+    "id": { "type": "number", "description": "Id da cloud, o número em /clouds/<id> no painel" }
+  },
+  "additionalProperties": false }
 ```
 
 ```jsonc
@@ -1641,17 +1648,32 @@ escolher o `cloud` de `cloudez_create_site` (§3.21).
     { "id": 24923, "name": "meu-servidor", "fqdn": "srv-24923.cloudez.io",
       "is_default": true, "websites_count": 2 }
   ],
-  "truncated": "…"   // só quando há mais clouds do que a primeira página trouxe
+  "query": "configrsys03",   // só quando houve busca por termo
+  "truncated": "…"           // só quando há mais clouds do que a busca trouxe
 }
 ```
 
-**Endpoint:** `GET /v3/cloud/?page_size=20` — já escopado pela API ao usuário
-autenticado (ou à empresa/time dele), sem precisar de `company_id`.
+**Endpoints**, todos já escopados pela API ao usuário autenticado (ou à
+empresa/time dele), sem precisar de `company_id`:
 
-**Sem loop de paginação, ao contrário do `cloudez_list_sites` (§3.2).** Uma
-conta tem tipicamente poucas clouds — o trial cria uma só —, então a página
-máxima (20) cobre o caso comum. Havendo mais, `truncated` avisa em vez de
-afirmar que a lista é completa.
+```
+GET /v3/cloud/?page_size=20                    # sem argumento
+GET /v3/cloud/?page_size=20&search=<termo>     # com query
+GET /v3/cloud/<id>/                            # com id
+```
+
+**Sem argumento, só a primeira página.** Uma conta tem tipicamente poucas
+clouds, e a página máxima (20) cobre o caso comum. Havendo mais, `truncated`
+avisa em vez de afirmar que a lista é completa.
+
+**A busca por termo é a da própria API** (`search` do `CloudFilter`), que casa
+em parte com apelido, fqdn, IP e e-mail do administrador. Ela existe porque, sem
+ela, uma cloud fora da primeira página não era encontrável, e o
+`cloudez_list_sites` não ajuda com cloud que ainda não tem site. Segue as páginas
+até 5 (100 clouds); passando disso, `truncated` pede um termo mais específico.
+
+**Pelo `id`**, a cloud inexistente ou fora do alcance do usuário vira
+`cloud_not_found`.
 
 **`name` é `nickname`, ou `name`, ou um placeholder** — a API pode não trazer
 nenhum dos dois preenchido. Item sem `id` válido é descartado, pela mesma razão
@@ -1789,6 +1811,7 @@ Códigos previstos:
 |---|---|---|
 | `invalid_argument` | não | a Cloudez recusou o corpo enviado; `message` traz o campo e a razão quando o 400 os nomeia |
 | `site_not_found` | não | domínio não existe na conta |
+| `cloud_not_found` | não | id de cloud que não existe na conta, em `cloudez_list_clouds` |
 | `not_authenticated` | não | nenhum token configurado na máquina |
 | `token_invalid` | não | a Cloudez recusou o token (expirado ou revogado) |
 | `deploy_not_found` | não | `deploy_id` inválido ou expirado |

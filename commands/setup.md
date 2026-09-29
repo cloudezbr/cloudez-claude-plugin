@@ -118,6 +118,23 @@ não foi possível confirmar agora e pergunte se ele quer tentar de novo.
 Chegou aqui porque o usuário confirmou que quer um site novo, com o domínio do
 passo 1 — não algo que ele precise fazer no painel primeiro.
 
+**Veio `--cloud`, ou o usuário já disse a cloud?** Busque por ela em vez de
+listar, porque a listagem traz só a primeira página e a cloud dele pode estar
+fora dela:
+
+```
+cloudez_list_clouds(id: <número>)          # quando ele deu o id
+cloudez_list_clouds(query: "<trecho>")     # quando deu o fqdn, parte dele ou o apelido
+```
+
+- **Uma cloud** — use o `id` dela, sem perguntar;
+- **Mais de uma** — o trecho casou com várias. Pergunte qual, como no caso
+  "Mais de uma" abaixo;
+- **Nenhuma, ou `cloud_not_found`** — diga isso ao usuário e siga pela listagem
+  abaixo.
+
+Sem cloud indicada, liste:
+
 ```
 cloudez_list_clouds()
 ```
@@ -125,15 +142,13 @@ cloudez_list_clouds()
 - **Nenhuma cloud** — vá direto para "Contratar uma cloud nova", abaixo. Isto é
   conta antiga sem trial nenhum contratado; não confunda com conta nova, que já
   sai do `/cloudez:login` com uma (`cloudez_setup_trial_cloud`);
-- **Veio `--cloud`, ou o usuário já disse a cloud** — ele pode dar o `id` ou o
-  `fqdn`. Procure na lista pelos dois e use o `id` da que casar, sem perguntar.
-  Não casando com nenhuma, diga isso e siga pelos casos abaixo;
 - **Uma cloud só** — use o `id` dela direto, sem perguntar: não há entre o quê
   escolher;
 - **Mais de uma** — pergunte qual com AskUserQuestion, mostrando `id`, `name` e
   `fqdn` de cada uma, e acrescente "contratar uma nova" como opção — o usuário
   pode querer uma cloud separada mesmo já tendo outras. Ele pode responder com o
-  `id` ou o `fqdn`.
+  `id` ou o `fqdn`. Se vier `truncated`, diga que há mais clouds e que ele pode
+  citar a dele pelo `id` ou por parte do `fqdn`, e busque como acima.
 
 Se ele escolher "contratar uma nova", vá para "Contratar uma cloud nova",
 abaixo. Do contrário, com o `id` escolhido:
