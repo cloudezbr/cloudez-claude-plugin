@@ -688,6 +688,12 @@ empresa: confira com `cloudez_list_database_types`.
 Nos dois casos o desenvolvimento é igual — o banco sobe pelo Compose na máquina de
 quem desenvolve. O que muda é só produção.
 
+**Aplicação com Supabase é pergunta, nunca troca automática.** O
+`/cloudez:compose` pergunta se o usuário quer o Supabase self-hosted na Cloudez,
+que é o recomendado porque a aplicação não muda, ou migrar para Node e
+PostgreSQL, mostrando os prós e contras de cada caminho. A migração só começa
+depois de ele confirmar que entendeu o que vai ser reescrito.
+
 ## O diretório do servidor saiu do `.cloudez.yaml`
 
 O arquivo tinha `root: ~/<domain>/www/claude`. Ele saiu, e o valor passou a ser

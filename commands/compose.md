@@ -108,6 +108,7 @@ O que procurar, e por quê:
 | Em que porta escuta | busca por `listen`, `PORT`, `addr`, `bind` no código |
 | Precisa de build | `scripts.build`, `tsconfig`, `vite`, `webpack`, um estágio de compilação |
 | Precisa de serviços | driver de banco nas dependências (`pg`, `mysql2`, `psycopg`, `redis`). Havendo banco, a engine decide onde ele mora: MySQL, MariaDB e PostgreSQL vão para a instância gerenciada pela Cloudez, as demais para o container com volume nomeado (passo 3) |
+| Usa Supabase | `@supabase/supabase-js`, `@supabase/ssr`, um diretório `supabase/` com `config.toml` ou `migrations/`, `SUPABASE_URL` no ambiente. Havendo, **pare e pergunte**, como diz a seção logo abaixo |
 | Manda e-mail | `nodemailer`, `sendmail`, `Mail::`, `send_mail`, `SMTP_`/`MAIL_`/`EMAIL_` no ambiente. Havendo envio, o padrão é o MTA do próprio servidor — sem conta externa e sem chave de API. Exige `network_mode: host`, no passo 3 |
 | Roda como que usuário | `USER` e `adduser -u` no Dockerfile. Não-root muda o que a sobreposição precisa fazer — passo 3 |
 | Onde escreve em runtime | busca por `writeFile`, `open(`, `mkdir`, caminhos de cache e upload. Todo caminho gravado precisa sobreviver ao deploy, ou ser gravável pelo uid certo |
@@ -115,6 +116,37 @@ O que procurar, e por quê:
 **Pergunte o que o projeto não responde.** Credenciais, qual banco de verdade,
 se aquele Redis é opcional, se o build precisa de variável de ambiente. E
 pergunte de uma vez, não uma por mensagem.
+
+### Supabase: pergunte antes de tocar em qualquer coisa
+
+Supabase não é só um PostgreSQL: é autenticação, storage, realtime, RLS e edge
+functions em volta dele. **Nunca troque a aplicação para um PostgreSQL comum por
+conta própria.** Se o usuário quer hospedar na Cloudez uma aplicação que usa
+Supabase, pergunte com AskUserQuestion qual dos dois caminhos ele quer, mostrando
+os prós e contras de cada um:
+
+| | Supabase self-hosted (**recomendado**) | Migrar para Node + PostgreSQL |
+|---|---|---|
+| **Código da aplicação** | Não muda: o `supabase-js`, a autenticação, o storage, o realtime e as políticas RLS seguem funcionando | Muda bastante: autenticação, storage, realtime e as chamadas do `supabase-js` viram código próprio, e as políticas RLS viram checagens na API |
+| **Migração** | Dump e restore do banco e cópia dos arquivos do storage | Além dos dados, reescrever e testar cada parte que usava o Supabase. Fluxos de login por OAuth ou link mágico precisam ser refeitos |
+| **Servidor** | Pesado: a stack oficial tem mais de dez containers e pede uma cloud com mais memória | Leve, cabe numa cloud menor |
+| **Banco** | O PostgreSQL do Supabase roda no container dele, com as extensões que ele exige. O backup é do projeto | PostgreSQL gerenciado pela Cloudez, com backup, atualização e suporte dela |
+| **Risco** | Baixo: a aplicação já funciona assim | Alto: mais tempo, e trocar RLS por código é onde costumam nascer falhas de segurança |
+
+Com **self-hosted**, o Compose é o da stack oficial do Supabase (o
+`docker/docker-compose.yml` do repositório `supabase/supabase`), ajustado às
+restrições do passo 3. Os segredos (`JWT_SECRET`, `ANON_KEY`,
+`SERVICE_ROLE_KEY`, senha do banco) são gerados novos e vão pelo
+`cloudez_set_env`, nunca para o arquivo. O Studio não fica exposto sem senha. O
+banco dele é exceção à regra das engines: fica no container, com volume nomeado e
+o backup da seção de banco no container.
+
+Com **Node + PostgreSQL**, só siga depois de o usuário confirmar que entendeu os
+contras acima. Diga o que vai ser reescrito antes de começar, e o banco segue a
+regra das engines: PostgreSQL gerenciado pela Cloudez.
+
+Se ele só quer hospedar a aplicação na Cloudez e continuar usando o Supabase da
+supabase.com, nenhum dos dois se aplica: a aplicação segue apontando para lá.
 
 ## 3. As restrições que não são negociáveis
 
