@@ -429,6 +429,38 @@ Sem essa distinção, um usuário sem SSH liberado receberia o pedido de preench
 `ssh.host` e `ssh.user` na config à mão — e o deploy falharia depois com permissão
 negada, longe da causa. Nenhum valor digitado contorna um `has_ssh: false`.
 
+**Site do tipo `claude` sem `framework` vem com `framework_missing`.** É uma
+instrução para o modelo, no mesmo formato do `ssh_unavailable`: descobrir o
+framework lendo as dependências do projeto, escolher o valor da lista e gravá-lo
+com `cloudez_configure_site` passando só `domain` e `framework`, antes de seguir
+com o pedido do usuário. Site estático, só HTML, CSS e JavaScript sem framework,
+é `html`. Só não grava se o diretório atual não for o projeto do site. Outros
+tipos não recebem o campo, porque o `framework` só existe no `claude`.
+
+O `html` e a regra do site estático vieram de um deploy real: num projeto com só
+um `index.html` servido por `nginx:alpine`, o modelo recebeu o aviso, leu o
+projeto e não gravou nada. A lista não tinha valor para site estático, e a
+instrução ainda permitia "não gravar se não houver código que mostre a
+tecnologia", o que um `index.html` sem dependências parecia ser.
+
+```jsonc
+// output — site claude sem framework
+{
+  "match": "exact",
+  "site": {
+    "domain": "meusite.com.br",
+    "stack": "claude",
+    "framework_missing": "Este site ainda não tem o framework registrado. Descubra-o lendo o projeto: ..."
+  }
+}
+```
+
+A instrução mora no retorno, e não em cada comando, porque o campo ficava vazio
+nos sites criados antes de ele existir: só o `/cloudez:setup` o preenchia, e só
+quando o document root ou a porta também precisavam de ajuste. Com o aviso no
+retorno, qualquer leitura do site preenche o campo, seja no setup, no deploy, no
+rollback, no compose ou numa conversa fora deles.
+
 **`cloudez_get_site` não devolve `root`.** O destino da publicação vem sempre do
 `.cloudez.yaml` do projeto, e ter uma segunda fonte para ele seria criar a
 pergunta "qual vale?" para a informação mais destrutiva deste plugin — pergunta
@@ -485,7 +517,7 @@ document root.
     "domain": { "type": "string" },
     "app_root_path": { "type": "string", "description": "Relativo a ~/<domain>/www. Normalmente 'claude/current'." },
     "custom_port": { "type": "string", "description": "Porta do host que o nginx encaminha para '/'. Default do plugin: '3000'." },
-    "framework": { "type": "string", "description": "Tecnologia da aplicação, em slug. Só existe no tipo claude." }
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, um valor da lista. Só existe no tipo claude." }
   },
   "required": ["domain"],
   "additionalProperties": false
@@ -496,7 +528,14 @@ Passe só o que quiser alterar. O que já estiver correto não gasta escrita.
 
 O `framework` vai no mesmo PATCH, quando o site ainda não o tem ou ele não
 descreve mais o projeto. As regras do valor são as de `cloudez_create_site`
-(§3.21).
+(§3.21). Gravado sozinho, ele **não pede o aceite do usuário** que o document
+root e a porta pedem: não muda o que o site serve. É assim que o
+`framework_missing` do `cloudez_get_site` (§3.3) é atendido.
+
+**O PATCH tem timeout próprio, de 60s** (`CLOUDEZ_WEBSITE_UPDATE_TIMEOUT`), e não
+os 10s das outras chamadas. Alterar o site passa pelos mesmos sinais do `save()`
+que a criação (§3.21): visto na prática, gravar só o `framework` estourou os 10s
+duas vezes seguidas no mesmo site, e o valor não foi aplicado nenhuma das duas.
 
 ```jsonc
 // output
@@ -1540,7 +1579,7 @@ instrução de criar pelo painel primeiro. Verificado contra o código real da A
   "properties": {
     "cloud": { "type": "number", "description": "Id da cloud onde criar o site" },
     "domain": { "type": "string", "description": "FQDN da aplicação" },
-    "framework": { "type": "string", "description": "Tecnologia da aplicação, em slug" }
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, um valor da lista" }
   },
   "required": ["cloud", "domain", "framework"],
   "additionalProperties": false
@@ -1564,12 +1603,13 @@ POST /v3/website/
                                                { "slug": "framework", "value": "nextjs" }] }
 ```
 
-**O `framework` é escolhido pelo modelo, lendo o projeto.** A lista de valores
-conhecidos está em `src/frameworks.ts` do `cloudez-mcp` e vai na descrição da
-tool. O modelo usa o valor da lista que melhor descreve a tecnologia, preferindo o
-framework à linguagem. Tecnologia fora da lista entra como slug novo
-(minúsculas, números e hífen, como "Next.JS" vira `nextjs`), então a tool valida
-só o formato, antes do POST.
+**O `framework` é escolhido pelo modelo, lendo as dependências do projeto, e
+sempre da lista.** A lista está em `src/frameworks.ts` do `cloudez-mcp` e vai na
+descrição da tool. O modelo usa o valor que corresponde à tecnologia, preferindo
+o framework à linguagem: `nextjs` e não `nodejs`. A lista traz também as
+linguagens, e `html` para site estático, então um projeto sem framework ainda tem
+um valor. A tool recusa com
+`invalid_argument`, antes do POST, qualquer valor fora da lista.
 
 **`cloud` é o id inteiro de um `Node`** (o que `cloudez_list_clouds`, §3.22,
 devolve), não um objeto. **`type` aceita o slug diretamente** — `"claude"` — a

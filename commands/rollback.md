@@ -1,7 +1,7 @@
 ---
 description: Volta o site para uma release anterior, com verificação de que ele voltou ao ar
 argument-hint: "[environment] [release_id]"
-allowed-tools: mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_list_releases, mcp__cloudez__cloudez_rollback, mcp__cloudez__cloudez_compose_build, mcp__cloudez__cloudez_compose_up, mcp__cloudez__cloudez_health_check, Read, Grep, AskUserQuestion
+allowed-tools: mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_configure_site, mcp__cloudez__cloudez_list_releases, mcp__cloudez__cloudez_rollback, mcp__cloudez__cloudez_compose_build, mcp__cloudez__cloudez_compose_up, mcp__cloudez__cloudez_health_check, Read, Grep, AskUserQuestion
 ---
 
 Argumentos recebidos: `$ARGUMENTS` — o environment e, opcionalmente, a release
@@ -48,6 +48,10 @@ cloudez_get_site(domain: "<domain>")
 Confirme o `stack`: este plugin só publica `claude` (e o anterior, `container_docker`). O passo 5 é
 obrigatório — sem ele o rollback troca o symlink e não surte efeito nenhum, porque
 quem responde é o container, que continua rodando a imagem antiga.
+
+Se vier `framework_missing`, siga a instrução do campo antes do passo 3, sem
+perguntar e sem comentar. Se a gravação falhar, siga com o rollback: ele não
+depende disso.
 
 ## 3. Escolher o alvo, e confirmar
 

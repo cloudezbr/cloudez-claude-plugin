@@ -1,7 +1,7 @@
 ---
 description: Faz deploy de um site para a Cloudez, com ativação atômica da release e rollback
 argument-hint: "[environment] [diretório]"
-allowed-tools: mcp__Claude_Browser__preview_start, mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_find_compose, mcp__cloudez__cloudez_health_check, mcp__cloudez__cloudez_check_dns, mcp__cloudez__cloudez_begin_deploy, mcp__cloudez__cloudez_finalize_deploy, mcp__cloudez__cloudez_compose_build, mcp__cloudez__cloudez_compose_up, mcp__cloudez__cloudez_list_releases, mcp__cloudez__cloudez_rollback, Bash(cloudez-sync:*), Bash(git:*), Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Read, AskUserQuestion
+allowed-tools: mcp__Claude_Browser__preview_start, mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_configure_site, mcp__cloudez__cloudez_find_compose, mcp__cloudez__cloudez_health_check, mcp__cloudez__cloudez_check_dns, mcp__cloudez__cloudez_begin_deploy, mcp__cloudez__cloudez_finalize_deploy, mcp__cloudez__cloudez_compose_build, mcp__cloudez__cloudez_compose_up, mcp__cloudez__cloudez_list_releases, mcp__cloudez__cloudez_rollback, Bash(cloudez-sync:*), Bash(git:*), Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Read, AskUserQuestion
 ---
 
 Argumentos recebidos: `$ARGUMENTS` — o environment e, opcionalmente, o diretório
@@ -94,6 +94,11 @@ destino sozinho pelo `domain` e o grava no estado do deploy, e é de lá que o
 `cloudez-sync`, o `finalize` e o `compose_up` o leem.
 
 Eles não estão no `.cloudez.yaml` de propósito — [A1](#a1).
+
+**`framework_missing`** — siga a instrução do campo aqui, antes do passo 2: leia
+o projeto e grave só o `framework` com `cloudez_configure_site`, sem perguntar e
+sem comentar. Não interrompe o deploy: se a gravação falhar, siga assim mesmo —
+[A15](#a15).
 
 **`match: "candidates"` ou `site_not_found`** — **pare.** O `domain` veio de um
 arquivo versionado: se não casa exatamente com um site da conta, a config está
@@ -798,6 +803,23 @@ Um deploy é o momento mais provável para o usuário abrir o domínio pela prim
 vez, e portanto o momento em que essa frase errada custa mais: ela manda procurar
 no painel um botão que não existe. Se ele perguntar, a resposta é que o
 certificado sai sozinho.
+
+<a id="a15"></a>
+
+### A15 — Por que o deploy grava o framework
+
+O `framework` do site passou a existir depois de muitos sites já criados, e o
+único ponto que o preenchia era o passo 5 do `/cloudez:setup` — e só quando o
+document root ou a porta também precisavam de ajuste. Um site já configurado
+nunca voltava ao setup, então ficava com o campo vazio para sempre.
+
+O deploy é a interação que todo site repete, e já lê o site no passo 1 com o
+projeto aberto no diretório local: é o momento em que o modelo tem as duas coisas
+de que precisa para escolher o valor certo. A instrução vem no próprio retorno do
+`cloudez_get_site`, e não só aqui, para valer em qualquer leitura do site.
+
+Ele não pede aceite porque não muda o que o site serve, e não interrompe o deploy
+quando falha pelo mesmo motivo: publicar não depende dele.
 
 O caso em que há algo a fazer é outro: DNS apontado há bastante tempo e site
 ainda sem HTTPS. Aí existe uma tool — `cloudez_request_certificate` —, mas ela é

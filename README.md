@@ -461,6 +461,22 @@ completo está no apêndice B de [`docs/mcp-tool-contract.md`](docs/mcp-tool-con
       automático foram lidos no código da API (`CertificateViewSet` v3,
       `CertificateCreateSerializer`, `auto_start_https`, `ask_certificates`), e
       a suíte cobre os caminhos contra uma API falsa
+- [x] `framework` preenchido em qualquer leitura do site. O campo ficava vazio
+      nos sites criados antes de ele existir: só o passo 5 do `/cloudez:setup`
+      o gravava, e só quando o document root ou a porta também precisavam de
+      ajuste. Agora o `cloudez_get_site` devolve `framework_missing` num site
+      `claude` sem o campo, com a instrução de descobrir o valor pelas
+      dependências do projeto e gravá-lo com `cloudez_configure_site`. Setup,
+      deploy, rollback e compose tratam o campo; gravado sozinho, o framework
+      não pede aceite, porque não muda o que o site serve. O valor sai sempre
+      da lista de `src/frameworks.ts` do `cloudez-mcp`, que traz também as
+      linguagens e `html` para site estático, e a tool recusa o que estiver
+      fora dela (contrato §3.3, §3.4 e §3.21). O `html` veio de um deploy real
+      em que o modelo recebeu o aviso num site só com `index.html` e não
+      gravou, por falta de valor na lista. O PATCH do site ganhou timeout
+      próprio de 60s: gravar o framework estourava os 10s padrão, e o valor
+      não era aplicado. **Não confirmado ainda contra a API real** que 60s
+      bastam
 - [ ] O rollback de container depende de estado LOCAL. O `cloudez_rollback` é
       chaveado por domínio + root (estado do servidor), mas o `compose_build` e o
       `compose_up` são chaveados por `deploy_id` (estado em `~/.cloudez/state/`).

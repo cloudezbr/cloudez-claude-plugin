@@ -63,6 +63,9 @@ certo e ser o projeto errado — a mesma conta hospeda vários sites, e este é 
 Se ele disser que não é esse, **encerre**. Não tente outra busca por conta
 própria: pergunte o domínio correto e volte ao passo 1.
 
+Se o site vier com `framework_missing`, **não grave ainda**: só depois da
+confirmação ele é o site deste projeto. O passo 5 cuida disso.
+
 ### `match: "candidates"` — não achou exato, mas achou parecidos
 
 **Liste os candidatos**, mostrando o `id` e o `domain` de cada um — e também os de
@@ -160,13 +163,14 @@ cloudez_create_site(cloud: <id>, domain: "<domain do passo 1>", framework: "<slu
 **Não pergunte o tipo do site.** É sempre `claude` — o único que este plugin
 publica — e a tool não aceita outro.
 
-**O `framework` é você quem escolhe, lendo o projeto.** Use o valor da lista da
-tool que melhor descreve a tecnologia, preferindo o framework à linguagem:
-`nextjs` e não `nodejs`, `django` e não `python`. O `package.json`, o
-`requirements.txt`, o `composer.json` e afins costumam responder. Se a
-tecnologia não estiver na lista, escreva o nome dela em slug: minúsculas,
-números e hífen, como "Next.JS" vira `nextjs`. Só pergunte ao usuário quando o
-projeto ainda não tiver código que diga a tecnologia.
+**O `framework` é você quem escolhe, lendo o projeto.** Descubra a tecnologia
+pelas dependências declaradas — `package.json`, `requirements.txt`,
+`composer.json` e afins —, não pela linguagem nem pela imagem base do
+`Dockerfile`. O valor sai sempre da lista da tool, escrito como nela; outro é
+recusado. Prefira o framework à linguagem: `nextjs` e não `nodejs`, `django` e
+não `python`. A linguagem, que também está na lista, só quando o projeto não usar
+framework nenhum dela. Site estático — só HTML, CSS e JavaScript, sem framework —
+é `html`. Só pergunte ao usuário quando o projeto ainda não tiver código nenhum.
 
 O domínio é único **por cloud**, não por conta: se vier `invalid_argument`
 dizendo que o domínio já existe, é porque já há um site com ele **naquela
@@ -304,9 +308,14 @@ ainda não ter Compose nenhum — então:
 - **não tem**: use **3000**, que é o que o `/cloudez:compose` vai escrever depois.
 
 **O `framework`** descreve a tecnologia da aplicação e só existe no tipo `claude`.
-Se o `cloudez_get_site` não o trouxer, ou trouxer um que não descreve mais o
-projeto, escolha o valor como no passo 2 e inclua-o na mesma chamada abaixo. Ele
-não muda o que o site serve, então não pede o aviso dos outros dois.
+Se o `cloudez_get_site` trouxe `framework_missing`, ou um framework que não
+descreve mais o projeto, escolha o valor como no passo 2. Ele não muda o que o
+site serve, então não pede o aviso nem o aceite dos outros dois:
+
+- se os outros dois precisarem de ajuste, ele vai na mesma chamada abaixo;
+- se não precisarem, ou se o usuário recusar o ajuste, grave-o sozinho, com
+  `cloudez_configure_site(domain: "<domain>", framework: "<valor>")`, sem
+  comentar com o usuário.
 
 **Se os dois já estiverem certos**, diga que está tudo certo e siga.
 

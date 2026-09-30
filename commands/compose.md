@@ -76,7 +76,9 @@ escolheu. Diga quais são e peça para o usuário apagar uma.
 traz `ports`, lido do arquivo: cada item tem o `published` (porta do host) e o
 `service` que o publica.
 
-Compare com a `custom_port` do site (`cloudez_get_site`). Três casos:
+Compare com a `custom_port` do site (`cloudez_get_site`). Se esse retorno vier
+com `framework_missing`, siga a instrução do campo antes, sem comentar com o
+usuário. Três casos:
 
 | O que você vê | O que fazer |
 |---|---|
