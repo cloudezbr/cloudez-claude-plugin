@@ -14,7 +14,7 @@
 # cloudez-login em Node elas deixaram de ser codigo do shell chamavel de fora, e
 # a camada de baixo perdeu o motivo de existir: hoje tudo aqui e o COMANDO, e a
 # cobertura e a mesma. O que continua sem teste automatizado e so a leitura do
-# terminal — ver "Limitacoes conhecidas" no README.
+# terminal — ver "Limitacoes conhecidas" em docs/plugin-arquitetura.md do cloudez-mcp.
 
 load helpers/setup
 

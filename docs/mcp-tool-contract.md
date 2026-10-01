@@ -1448,7 +1448,7 @@ tê-lo gasto.
 
 Pedido de contratação **paga**, e ausência de `trial_ia_plan_id` (revenda sem
 plano trial configurado), levam ao mesmo lugar — não há tool: a contratação é
-manual, em `<panel_host>/clouds/create` (ver §3.24).
+manual, em `<panel_host>/clouds/create` (ver §3.25).
 
 ---
 
@@ -1521,7 +1521,7 @@ quem chama a rodá-la uma vez por conta — no cadastro, ou no
 só para o cadastro: o limite de um trial por conta é da Cloudez, que recusa o
 segundo com `trial_already_exists` (abaixo). **Não é resposta para
 "contratar um cloud" sem adjetivo**: contratação paga não tem tool, de
-propósito (§3.24) — é dinheiro de verdade e escolha de plano do usuário, não
+propósito (§3.25) — é dinheiro de verdade e escolha de plano do usuário, não
 algo que se decida por ele. A orientação nesse caso é sempre a mesma, manual:
 abrir `<panel_host>/clouds/create` no painel.
 
@@ -1781,7 +1781,72 @@ Ver [A-HTTPS](#a-https).
 
 ---
 
-### 3.24 Fora do escopo, por enquanto
+### 3.24 `cloudez_convert_site` — **mutating**
+
+Converte um site que já existe (WordPress, `html`, ou outro tipo) para o tipo
+`claude`, o único em que este plugin publica, e guarda o que o site servia até
+então. É a tool do `/cloudez:convert`.
+
+```jsonc
+// input
+{ "type": "object", "properties": { "domain": { "type": "string" } },
+  "required": ["domain"], "additionalProperties": false }
+```
+
+```jsonc
+// output
+{
+  "domain": "meusite.com.br",
+  "converted": true,                 // a troca de tipo aconteceu nesta chamada
+  "previous_stack": "wordpress",     // ausente quando nada foi convertido
+  "backup_path": "/home/u/meusite.com.br/www/bkp-20261001153000",  // ausente sem nada a mover
+  "moved": 12                        // entradas do www movidas
+}
+```
+
+**Endpoint:** `POST /v3/website/{id}/convert-to-claude/`, corpo vazio. A API
+confere a RAM da cloud (mínimo de 2 GB, a mesma regra da criação de site
+`claude`), cria o addon `docker` da cloud se faltar, e troca o tipo. Não grava
+`app_root_path` nem `custom_port`: isso continua com §3.4.
+
+**Converte primeiro, move os arquivos depois.** Com a ordem inversa, a recusa por
+RAM chegaria depois de o site antigo já ter saído do ar. Assim, a recusa vem como
+`cloud_too_small` sem nada alterado, e um ssh que falhe depois deixa o site
+convertido com os arquivos intactos.
+
+**Relê antes de mover.** A troca só conta depois de `cloudez_get_site` devolver
+`stack: "claude"`. Um 200 sem efeito sai como `upstream_unavailable`, sem arquivo
+movido.
+
+**O backup é por ssh, com o usuário do site.** Tudo o que está em
+`~/<domain>/www` — ocultos inclusive, como o `.htaccess` — vai para
+`~/<domain>/www/bkp-<data>/`, menos o `claude/` deste plugin e os `bkp-*`
+anteriores. Nada é apagado, e o banco de dados não é tocado. Sem nada a mover,
+nenhum diretório é criado e `moved` vale 0.
+
+**Idempotente, e é isso que cobre o ssh que falha no meio.** O que a tool faz
+depende do site:
+
+| Site | O que acontece |
+|---|---|
+| `stack` que não é `claude` nem `container_docker` | converte e faz o backup |
+| `claude` com `app_root_path` diferente de `claude/current` | só o backup — o caso de repetir depois de um `ssh_failed` |
+| `claude` com `claude/current`, ou `container_docker` | nada; devolve `converted: false, moved: 0` |
+
+O `container_docker` fica de fora porque pode estar servindo de outro diretório:
+mover o `www` dele derrubaria um site que funciona.
+
+**Erros próprios:** `cloud_too_small` (nada foi alterado), `ssh_failed` com
+`retryable: true` (o `hint` diz se o tipo já foi trocado; chamar de novo refaz só
+o backup), `missing_ssh_target`.
+
+**Não verificado contra servidor real:** se o usuário do site pode mover o
+conteúdo do `www` em todo tipo de origem. Coberto só pela suíte do `cloudez-mcp`,
+com o ssh executando o script num diretório temporário.
+
+---
+
+### 3.25 Fora do escopo, por enquanto
 
 Uma tool saiu desta proposta junto com a feature correspondente do plugin. Fica
 registrada para não ser redescoberta do zero:
@@ -1874,6 +1939,7 @@ Códigos previstos:
 | `trial_already_exists` | não | a conta já tem um cloud trial; confira `cloudez_list_clouds` em vez de criar outro |
 | `cloud_limit_reached` | não | limite de clouds da conta; a Cloudez pede para contatar o suporte |
 | `site_creation_unconfirmed` | não | o POST de `cloudez_create_site` falhou depois de enviado; o site pode ter sido criado mesmo assim — confira `cloudez_get_site` com o mesmo domínio antes de repetir |
+| `cloud_too_small` | não | a cloud do site tem menos RAM que o mínimo do tipo `claude`; `cloudez_convert_site` não alterou nada |
 
 O campo `retryable` importa: sem ele o modelo ou desiste de erro transitório ou
 insiste em erro permanente.

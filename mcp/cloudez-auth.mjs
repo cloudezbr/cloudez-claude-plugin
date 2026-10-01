@@ -1,4 +1,4 @@
-// cloudez-mcp 0.2.24 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.25 — gerado por 'npm run bundle'. Nao edite.
 
 // src/auth.ts
 import { readFile } from "node:fs/promises";

@@ -291,9 +291,11 @@ os arquivos como estáticos, o container nunca subiria, e o deploy rodaria intei
 sem erro nenhum. É a falha mais confusa que este plugin consegue produzir, e a
 razão desta checagem existir.
 
-Diga que o tipo do site precisa ser trocado para **Claude** no painel, e que o
-setup continua quando isso estiver feito. Não tente corrigir por conta própria — o
-tipo muda o que a Cloudez provisiona, e não é reversível por um comando nosso.
+Diga que, para publicar nele, o site precisa ser convertido para o tipo **Claude**,
+e ofereça o `/cloudez:convert`. **Se aceitar**, execute-o: ele cobre o que falta
+deste setup (chave SSH e Compose) e termina no deploy, então não volte aos passos
+6 e 7. **Se recusar**, pare aqui. Não converta por conta própria — a conversão
+tira o site atual do ar, e não é reversível por um comando nosso.
 
 **O `app_root_path`** é o diretório que o servidor web entrega, relativo a
 `~/<domain>/www`. O deploy publica em `~/<domain>/www/claude/current`, então o
