@@ -429,6 +429,38 @@ Sem essa distinção, um usuário sem SSH liberado receberia o pedido de preench
 `ssh.host` e `ssh.user` na config à mão — e o deploy falharia depois com permissão
 negada, longe da causa. Nenhum valor digitado contorna um `has_ssh: false`.
 
+**Site do tipo `claude` sem `framework` vem com `framework_missing`.** É uma
+instrução para o modelo, no mesmo formato do `ssh_unavailable`: descobrir o
+framework lendo as dependências do projeto, escolher o valor da lista e gravá-lo
+com `cloudez_configure_site` passando só `domain` e `framework`, antes de seguir
+com o pedido do usuário. Site estático, só HTML, CSS e JavaScript sem framework,
+é `html`. Só não grava se o diretório atual não for o projeto do site. Outros
+tipos não recebem o campo, porque o `framework` só existe no `claude`.
+
+O `html` e a regra do site estático vieram de um deploy real: num projeto com só
+um `index.html` servido por `nginx:alpine`, o modelo recebeu o aviso, leu o
+projeto e não gravou nada. A lista não tinha valor para site estático, e a
+instrução ainda permitia "não gravar se não houver código que mostre a
+tecnologia", o que um `index.html` sem dependências parecia ser.
+
+```jsonc
+// output — site claude sem framework
+{
+  "match": "exact",
+  "site": {
+    "domain": "meusite.com.br",
+    "stack": "claude",
+    "framework_missing": "Este site ainda não tem o framework registrado. Descubra-o lendo o projeto: ..."
+  }
+}
+```
+
+A instrução mora no retorno, e não em cada comando, porque o campo ficava vazio
+nos sites criados antes de ele existir: só o `/cloudez:setup` o preenchia, e só
+quando o document root ou a porta também precisavam de ajuste. Com o aviso no
+retorno, qualquer leitura do site preenche o campo, seja no setup, no deploy, no
+rollback, no compose ou numa conversa fora deles.
+
 **`cloudez_get_site` não devolve `root`.** O destino da publicação vem sempre do
 `.cloudez.yaml` do projeto, e ter uma segunda fonte para ele seria criar a
 pergunta "qual vale?" para a informação mais destrutiva deste plugin — pergunta
@@ -485,7 +517,8 @@ document root.
     "domain": { "type": "string" },
     "app_root_path": { "type": "string", "description": "Relativo a ~/<domain>/www. Normalmente 'claude/current'." },
     "custom_port": { "type": "string", "description": "Porta do host que o nginx encaminha para '/'. Default do plugin: '3000'." },
-    "framework": { "type": "string", "description": "Tecnologia da aplicação, em slug. Só existe no tipo claude." }
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, um valor da lista. Só existe no tipo claude." },
+    "add_aliases": { "type": "array", "items": { "type": "string" }, "description": "Hosts a adicionar como alias, como ['studio.meusite.com.br']." }
   },
   "required": ["domain"],
   "additionalProperties": false
@@ -496,7 +529,24 @@ Passe só o que quiser alterar. O que já estiver correto não gasta escrita.
 
 O `framework` vai no mesmo PATCH, quando o site ainda não o tem ou ele não
 descreve mais o projeto. As regras do valor são as de `cloudez_create_site`
-(§3.21).
+(§3.21). Gravado sozinho, ele **não pede o aceite do usuário** que o document
+root e a porta pedem: não muda o que o site serve. É assim que o
+`framework_missing` do `cloudez_get_site` (§3.3) é atendido.
+
+O `add_aliases` acrescenta hosts para o mesmo site responder, como o
+`studio.<domínio>` do Supabase Studio. **Só acrescenta, nunca remove.** A API
+guarda os aliases numa string só, e o PATCH a substitui inteira, então a tool
+manda a união dos atuais com os novos. Um alias que já existe não gasta escrita.
+A própria API tira o `www.` de cada alias, acrescenta o `www.<alias>`, e pede o
+certificado de novo quando a lista muda. Host inválido, ou o domínio do site e o
+`www` dele, são recusados antes de qualquer escrita. Como o document root e a
+porta, o alias pede o aceite do usuário. O DNS dele precisa apontar para a
+Cloudez como o do domínio.
+
+**O PATCH tem timeout próprio, de 60s** (`CLOUDEZ_WEBSITE_UPDATE_TIMEOUT`), e não
+os 10s das outras chamadas. Alterar o site passa pelos mesmos sinais do `save()`
+que a criação (§3.21): visto na prática, gravar só o `framework` estourou os 10s
+duas vezes seguidas no mesmo site, e o valor não foi aplicado nenhuma das duas.
 
 ```jsonc
 // output
@@ -505,6 +555,9 @@ descreve mais o projeto. As regras do valor são as de `cloudez_create_site`
   "previous_app_root_path": "public_html",
   "changed": ["app_root_path"] }
 ```
+
+Pedindo aliases, o retorno traz `aliases` com a lista inteira depois da escrita
+e, quando havia algum antes, `previous_aliases`.
 
 `changed` é a **lista** dos slugs efetivamente escritos, e não um booleano: com
 dois campos, "mudou" sozinho não diz qual. Lista vazia significa que tudo já
@@ -537,6 +590,9 @@ PATCH /v3/website/<id>/
    depois da escrita, isso **não** vira `site_not_found`: ele respondeu um
    instante antes, e o erro mandaria o usuário procurar no painel um problema que
    a ferramenta pode ter causado.
+
+Pedindo aliases, a releitura confere também que cada alias novo apareceu e que
+nenhum dos que existiam sumiu. Falhando qualquer uma, a tool não reporta sucesso.
 
 **A tool não decide sozinha.** Quem chama precisa ter perguntado ao usuário: a
 mudança vale na hora, e até o primeiro deploy o diretório `claude/current` ainda
@@ -1409,7 +1465,7 @@ tê-lo gasto.
 
 Pedido de contratação **paga**, e ausência de `trial_ia_plan_id` (revenda sem
 plano trial configurado), levam ao mesmo lugar — não há tool: a contratação é
-manual, em `<panel_host>/clouds/create` (ver §3.24).
+manual, em `<panel_host>/clouds/create` (ver §3.25).
 
 ---
 
@@ -1482,7 +1538,7 @@ quem chama a rodá-la uma vez por conta — no cadastro, ou no
 só para o cadastro: o limite de um trial por conta é da Cloudez, que recusa o
 segundo com `trial_already_exists` (abaixo). **Não é resposta para
 "contratar um cloud" sem adjetivo**: contratação paga não tem tool, de
-propósito (§3.24) — é dinheiro de verdade e escolha de plano do usuário, não
+propósito (§3.25) — é dinheiro de verdade e escolha de plano do usuário, não
 algo que se decida por ele. A orientação nesse caso é sempre a mesma, manual:
 abrir `<panel_host>/clouds/create` no painel.
 
@@ -1540,7 +1596,7 @@ instrução de criar pelo painel primeiro. Verificado contra o código real da A
   "properties": {
     "cloud": { "type": "number", "description": "Id da cloud onde criar o site" },
     "domain": { "type": "string", "description": "FQDN da aplicação" },
-    "framework": { "type": "string", "description": "Tecnologia da aplicação, em slug" }
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, um valor da lista" }
   },
   "required": ["cloud", "domain", "framework"],
   "additionalProperties": false
@@ -1564,12 +1620,13 @@ POST /v3/website/
                                                { "slug": "framework", "value": "nextjs" }] }
 ```
 
-**O `framework` é escolhido pelo modelo, lendo o projeto.** A lista de valores
-conhecidos está em `src/frameworks.ts` do `cloudez-mcp` e vai na descrição da
-tool. O modelo usa o valor da lista que melhor descreve a tecnologia, preferindo o
-framework à linguagem. Tecnologia fora da lista entra como slug novo
-(minúsculas, números e hífen, como "Next.JS" vira `nextjs`), então a tool valida
-só o formato, antes do POST.
+**O `framework` é escolhido pelo modelo, lendo as dependências do projeto, e
+sempre da lista.** A lista está em `src/frameworks.ts` do `cloudez-mcp` e vai na
+descrição da tool. O modelo usa o valor que corresponde à tecnologia, preferindo
+o framework à linguagem: `nextjs` e não `nodejs`. A lista traz também as
+linguagens, e `html` para site estático, então um projeto sem framework ainda tem
+um valor. A tool recusa com
+`invalid_argument`, antes do POST, qualquer valor fora da lista.
 
 **`cloud` é o id inteiro de um `Node`** (o que `cloudez_list_clouds`, §3.22,
 devolve), não um objeto. **`type` aceita o slug diretamente** — `"claude"` — a
@@ -1741,7 +1798,72 @@ Ver [A-HTTPS](#a-https).
 
 ---
 
-### 3.24 Fora do escopo, por enquanto
+### 3.24 `cloudez_convert_site` — **mutating**
+
+Converte um site que já existe (WordPress, `html`, ou outro tipo) para o tipo
+`claude`, o único em que este plugin publica, e guarda o que o site servia até
+então. É a tool do `/cloudez:convert`.
+
+```jsonc
+// input
+{ "type": "object", "properties": { "domain": { "type": "string" } },
+  "required": ["domain"], "additionalProperties": false }
+```
+
+```jsonc
+// output
+{
+  "domain": "meusite.com.br",
+  "converted": true,                 // a troca de tipo aconteceu nesta chamada
+  "previous_stack": "wordpress",     // ausente quando nada foi convertido
+  "backup_path": "/home/u/meusite.com.br/www/bkp-20261001153000",  // ausente sem nada a mover
+  "moved": 12                        // entradas do www movidas
+}
+```
+
+**Endpoint:** `POST /v3/website/{id}/convert-to-claude/`, corpo vazio. A API
+confere a RAM da cloud (mínimo de 2 GB, a mesma regra da criação de site
+`claude`), cria o addon `docker` da cloud se faltar, e troca o tipo. Não grava
+`app_root_path` nem `custom_port`: isso continua com §3.4.
+
+**Converte primeiro, move os arquivos depois.** Com a ordem inversa, a recusa por
+RAM chegaria depois de o site antigo já ter saído do ar. Assim, a recusa vem como
+`cloud_too_small` sem nada alterado, e um ssh que falhe depois deixa o site
+convertido com os arquivos intactos.
+
+**Relê antes de mover.** A troca só conta depois de `cloudez_get_site` devolver
+`stack: "claude"`. Um 200 sem efeito sai como `upstream_unavailable`, sem arquivo
+movido.
+
+**O backup é por ssh, com o usuário do site.** Tudo o que está em
+`~/<domain>/www` — ocultos inclusive, como o `.htaccess` — vai para
+`~/<domain>/www/bkp-<data>/`, menos o `claude/` deste plugin e os `bkp-*`
+anteriores. Nada é apagado, e o banco de dados não é tocado. Sem nada a mover,
+nenhum diretório é criado e `moved` vale 0.
+
+**Idempotente, e é isso que cobre o ssh que falha no meio.** O que a tool faz
+depende do site:
+
+| Site | O que acontece |
+|---|---|
+| `stack` que não é `claude` nem `container_docker` | converte e faz o backup |
+| `claude` com `app_root_path` diferente de `claude/current` | só o backup — o caso de repetir depois de um `ssh_failed` |
+| `claude` com `claude/current`, ou `container_docker` | nada; devolve `converted: false, moved: 0` |
+
+O `container_docker` fica de fora porque pode estar servindo de outro diretório:
+mover o `www` dele derrubaria um site que funciona.
+
+**Erros próprios:** `cloud_too_small` (nada foi alterado), `ssh_failed` com
+`retryable: true` (o `hint` diz se o tipo já foi trocado; chamar de novo refaz só
+o backup), `missing_ssh_target`.
+
+**Não verificado contra servidor real:** se o usuário do site pode mover o
+conteúdo do `www` em todo tipo de origem. Coberto só pela suíte do `cloudez-mcp`,
+com o ssh executando o script num diretório temporário.
+
+---
+
+### 3.25 Fora do escopo, por enquanto
 
 Uma tool saiu desta proposta junto com a feature correspondente do plugin. Fica
 registrada para não ser redescoberta do zero:
@@ -1834,6 +1956,7 @@ Códigos previstos:
 | `trial_already_exists` | não | a conta já tem um cloud trial; confira `cloudez_list_clouds` em vez de criar outro |
 | `cloud_limit_reached` | não | limite de clouds da conta; a Cloudez pede para contatar o suporte |
 | `site_creation_unconfirmed` | não | o POST de `cloudez_create_site` falhou depois de enviado; o site pode ter sido criado mesmo assim — confira `cloudez_get_site` com o mesmo domínio antes de repetir |
+| `cloud_too_small` | não | a cloud do site tem menos RAM que o mínimo do tipo `claude`; `cloudez_convert_site` não alterou nada |
 
 O campo `retryable` importa: sem ele o modelo ou desiste de erro transitório ou
 insiste em erro permanente.

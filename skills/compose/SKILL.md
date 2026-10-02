@@ -1,6 +1,6 @@
 ---
 name: compose
-description: Escreve o docker-compose da aplicação, ou a sobreposição de produção quando já existe um, junto com o usuário. Use quando ele pedir para criar ou ajustar o docker-compose, containerizar a aplicação, preparar o projeto para rodar em Docker, ou quando pedir para acrescentar um banco de dados ao projeto.
+description: Escreve o docker-compose da aplicação, ou a sobreposição de produção quando já existe um, junto com o usuário. Use quando ele pedir para criar ou ajustar o docker-compose, containerizar a aplicação, preparar o projeto para rodar em Docker, ou quando pedir para acrescentar um banco de dados ao projeto. Use também quando ele quiser hospedar ou migrar para a Cloudez uma aplicação que usa Supabase.
 ---
 
 # Escrever o Compose da aplicação

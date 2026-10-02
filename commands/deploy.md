@@ -1,7 +1,7 @@
 ---
 description: Faz deploy de um site para a Cloudez, com ativação atômica da release e rollback
 argument-hint: "[environment] [diretório]"
-allowed-tools: mcp__Claude_Browser__preview_start, mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_find_compose, mcp__cloudez__cloudez_health_check, mcp__cloudez__cloudez_check_dns, mcp__cloudez__cloudez_begin_deploy, mcp__cloudez__cloudez_finalize_deploy, mcp__cloudez__cloudez_compose_build, mcp__cloudez__cloudez_compose_up, mcp__cloudez__cloudez_list_releases, mcp__cloudez__cloudez_rollback, Bash(cloudez-sync:*), Bash(git:*), Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Read, AskUserQuestion
+allowed-tools: mcp__Claude_Browser__preview_start, mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_configure_site, mcp__cloudez__cloudez_find_compose, mcp__cloudez__cloudez_health_check, mcp__cloudez__cloudez_check_dns, mcp__cloudez__cloudez_begin_deploy, mcp__cloudez__cloudez_finalize_deploy, mcp__cloudez__cloudez_compose_build, mcp__cloudez__cloudez_compose_up, mcp__cloudez__cloudez_list_releases, mcp__cloudez__cloudez_rollback, Bash(cloudez-sync:*), Bash(git:*), Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Read, AskUserQuestion
 ---
 
 Argumentos recebidos: `$ARGUMENTS` — o environment e, opcionalmente, o diretório
@@ -26,9 +26,8 @@ mas leia a entrada antes de afrouxar qualquer regra: a maioria parece excesso de
 zelo até você conhecer o caso que a criou.
 
 Todos os caminhos são relativos à raiz do projeto sendo publicado, que precisa
-ter um `.cloudez.yaml`. Se não tiver, pare e mande o usuário rodar
-`/cloudez:setup <domain> <environment>` — sem os dados de servidor não há deploy,
-e eles não são seus para inventar.
+ter um `.cloudez.yaml`. Se não tiver, o passo 1 descobre o site pelo domínio e
+encaminha para quem cria a config — não invente os dados de servidor.
 
 Quando o arquivo existir, não anuncie isso ("já existe um .cloudez.yaml
 configurado") — é mecanismo interno. Diga só que o projeto está pronto e siga
@@ -63,6 +62,32 @@ e é lá que ele deve ser lido ou alterado — não o reescreva aqui.
 
 ## 1. O alvo: qual environment, qual site
 
+### Sem `.cloudez.yaml`: descobrir o site pelo domínio
+
+**Não pare e não liste o que falta no projeto.** Pergunte só o domínio, em texto
+livre, propondo um valor se o projeto der pista dele — como no passo 1 do
+`commands/setup.md`. Com a resposta:
+
+```
+cloudez_get_site(domain: "<domain>")
+```
+
+- **`match: "exact"` com `stack` que não é `claude` nem `container_docker`** — o
+  site já existe na Cloudez com outro tipo. Diga isso em uma frase, nos termos do
+  usuário ("o meusite.com.br já existe na Cloudez como WordPress; para publicar
+  este projeto nele, ele precisa ser convertido"), e execute o
+  `/cloudez:convert <domain>`. Ele cria a config, converte e termina no deploy:
+  não volte a este comando.
+- **`match: "exact"` com `claude` ou `container_docker`** — o site já está pronto
+  para receber o projeto. Execute o `/cloudez:setup <domain>` e, quando ele
+  terminar, siga daqui do passo 1, com a config que ele criou.
+- **`match: "candidates"` ou `site_not_found`** — o site ainda não existe com esse
+  domínio. Execute o `/cloudez:setup <domain>`: ele mostra os parecidos e cria o
+  site quando o usuário quiser. Depois, siga daqui do passo 1.
+
+O que faltar no projeto (Compose, banco) aparece no passo em que importa, e não
+antes — [A17](#a17).
+
 ### Environment
 
 Os environments são as chaves de `cloudez:` no `.cloudez.yaml`. Sem argumento,
@@ -94,6 +119,15 @@ destino sozinho pelo `domain` e o grava no estado do deploy, e é de lá que o
 `cloudez-sync`, o `finalize` e o `compose_up` o leem.
 
 Eles não estão no `.cloudez.yaml` de propósito — [A1](#a1).
+
+**`stack` que não é `claude` nem `container_docker`** (WordPress, html, ...) —
+**pare.** Diga que, para publicar nele, o site precisa ser convertido para o tipo
+Claude, e ofereça o `/cloudez:convert` — [A16](#a16).
+
+**`framework_missing`** — siga a instrução do campo aqui, antes do passo 2: leia
+o projeto e grave só o `framework` com `cloudez_configure_site`, sem perguntar e
+sem comentar. Não interrompe o deploy: se a gravação falhar, siga assim mesmo —
+[A15](#a15).
 
 **`match: "candidates"` ou `site_not_found`** — **pare.** O `domain` veio de um
 arquivo versionado: se não casa exatamente com um site da conta, a config está
@@ -799,8 +833,58 @@ vez, e portanto o momento em que essa frase errada custa mais: ela manda procura
 no painel um botão que não existe. Se ele perguntar, a resposta é que o
 certificado sai sozinho.
 
+<a id="a15"></a>
+
+### A15 — Por que o deploy grava o framework
+
+O `framework` do site passou a existir depois de muitos sites já criados, e o
+único ponto que o preenchia era o passo 5 do `/cloudez:setup` — e só quando o
+document root ou a porta também precisavam de ajuste. Um site já configurado
+nunca voltava ao setup, então ficava com o campo vazio para sempre.
+
+O deploy é a interação que todo site repete, e já lê o site no passo 1 com o
+projeto aberto no diretório local: é o momento em que o modelo tem as duas coisas
+de que precisa para escolher o valor certo. A instrução vem no próprio retorno do
+`cloudez_get_site`, e não só aqui, para valer em qualquer leitura do site.
+
+Ele não pede aceite porque não muda o que o site serve, e não interrompe o deploy
+quando falha pelo mesmo motivo: publicar não depende dele.
+
 O caso em que há algo a fazer é outro: DNS apontado há bastante tempo e site
 ainda sem HTTPS. Aí existe uma tool — `cloudez_request_certificate` —, mas ela é
 para pedido explícito do usuário, não para ser chamada no fim de um deploy. O
 apêndice B do `docs/mcp-tool-contract.md` registra por que pedir cedo demais
 atrasa a emissão em vez de antecipá-la.
+
+<a id="a16"></a>
+
+### A16 — Por que o deploy confere o tipo do site
+
+Até aqui, só o passo 5 do `/cloudez:setup` olhava o tipo. Um `.cloudez.yaml`
+escrito à mão, ou um setup feito antes de o site ser trocado de tipo, levava o
+deploy inteiro até o fim num site `html` ou WordPress: release registrada, imagem
+construída, container de pé — e a Cloudez seguindo a servir os arquivos antigos,
+porque nesses tipos o nginx não encaminha para o container. Nenhum passo falha, e
+o usuário só descobre comparando o que publicou com o que o navegador mostra.
+
+Parar no passo 1 custa uma leitura que o deploy já faz. O caminho para seguir é o
+`/cloudez:convert`, e não "troque no painel", porque converter também precisa
+guardar os arquivos que o site serve hoje, e o painel não faz isso.
+
+<a id="a17"></a>
+
+### A17 — Por que, sem config, o deploy pergunta o domínio em vez de parar
+
+O deploy parava ao não achar o `.cloudez.yaml` e mandava o usuário rodar o
+`/cloudez:setup`. Num pedido real — "quero publicar meu site na Cloudez", num
+projeto WordPress sem config —, a resposta foi uma lista de pendências: rodar o
+setup com domínio e environment, escrever o Compose, trocar as credenciais do
+banco, e só no fim um "se o site já existe como WordPress, use o
+`/cloudez:convert`". Nenhuma pergunta, o usuário de volta ao terminal digitando
+comando, e nomes de arquivo na conversa.
+
+O que decide o caminho é uma coisa só: se o site já existe na Cloudez, e com qual
+tipo. Isso se descobre com o domínio e uma leitura, então o deploy pergunta o
+domínio e encaminha — site novo vai para o setup, que o cria; site de outro tipo
+vai para a conversão; site pronto vai para o setup só para criar a config. O que
+falta no projeto aparece depois, no passo em que importa.

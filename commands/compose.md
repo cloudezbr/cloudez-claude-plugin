@@ -76,7 +76,9 @@ escolheu. Diga quais são e peça para o usuário apagar uma.
 traz `ports`, lido do arquivo: cada item tem o `published` (porta do host) e o
 `service` que o publica.
 
-Compare com a `custom_port` do site (`cloudez_get_site`). Três casos:
+Compare com a `custom_port` do site (`cloudez_get_site`). Se esse retorno vier
+com `framework_missing`, siga a instrução do campo antes, sem comentar com o
+usuário. Três casos:
 
 | O que você vê | O que fazer |
 |---|---|
@@ -106,6 +108,7 @@ O que procurar, e por quê:
 | Em que porta escuta | busca por `listen`, `PORT`, `addr`, `bind` no código |
 | Precisa de build | `scripts.build`, `tsconfig`, `vite`, `webpack`, um estágio de compilação |
 | Precisa de serviços | driver de banco nas dependências (`pg`, `mysql2`, `psycopg`, `redis`). Havendo banco, a engine decide onde ele mora: MySQL, MariaDB e PostgreSQL vão para a instância gerenciada pela Cloudez, as demais para o container com volume nomeado (passo 3) |
+| Usa Supabase | `@supabase/supabase-js`, `@supabase/ssr`, um diretório `supabase/` com `config.toml` ou `migrations/`, `SUPABASE_URL` no ambiente. Havendo, siga a seção logo abaixo: o caminho é o Supabase self-hosted, com o Studio em `studio.<domínio>` |
 | Manda e-mail | `nodemailer`, `sendmail`, `Mail::`, `send_mail`, `SMTP_`/`MAIL_`/`EMAIL_` no ambiente. Havendo envio, o padrão é o MTA do próprio servidor — sem conta externa e sem chave de API. Exige `network_mode: host`, no passo 3 |
 | Roda como que usuário | `USER` e `adduser -u` no Dockerfile. Não-root muda o que a sobreposição precisa fazer — passo 3 |
 | Onde escreve em runtime | busca por `writeFile`, `open(`, `mkdir`, caminhos de cache e upload. Todo caminho gravado precisa sobreviver ao deploy, ou ser gravável pelo uid certo |
@@ -113,6 +116,58 @@ O que procurar, e por quê:
 **Pergunte o que o projeto não responde.** Credenciais, qual banco de verdade,
 se aquele Redis é opcional, se o build precisa de variável de ambiente. E
 pergunte de uma vez, não uma por mensagem.
+
+### Supabase: só self-hosted, com o Studio em `studio.<domínio>`
+
+Supabase não é só um PostgreSQL: é autenticação, storage, realtime, RLS e edge
+functions em volta dele. A única forma de hospedar na Cloudez uma aplicação que
+usa Supabase é o **Supabase self-hosted**. Não ofereça migrar para Node +
+PostgreSQL, e **nunca troque a aplicação para um PostgreSQL comum**. O código da
+aplicação não muda; o que migra são os dados (dump e restore do banco, cópia do
+storage).
+
+Avise o usuário antes de começar: a stack tem mais de dez containers e pede uma
+cloud com mais memória.
+
+**O Compose** é o da stack oficial (o `docker/docker-compose.yml` do repositório
+`supabase/supabase`), fixado numa tag e ajustado às restrições do passo 3:
+
+- **Uma só porta.** O nginx da Cloudez manda o domínio e os aliases do site para
+  a `custom_port`, repassando o `Host` original, então o gateway da stack
+  (`api-gw`) é quem a publica, em `127.0.0.1`, e roteia pelo host. No domínio, as
+  rotas do Supabase (`/auth/v1`, `/rest/v1`, `/storage/v1`, `/realtime/v1`,
+  `/functions/v1`) seguem como estão e o resto vai para a aplicação. Em
+  `studio.<domínio>`, tudo vai para o Studio.
+- **Arquivos de configuração ficam como estão.** Bind de arquivo (os do gateway,
+  os `.sql` de init do banco, o `pooler.exs`) fica na release e acompanha cada
+  deploy. Já bind de diretório vai para `shared/` e congela no primeiro deploy,
+  então o diretório de edge functions, que é código, vai para dentro da imagem do
+  `functions`, com um Dockerfile que o copia.
+- **Dado vai em volume nomeado**: o datadir do banco e o storage. O banco é
+  exceção à regra das engines: fica no container, com o backup da seção de banco
+  no container.
+- **Segredos** (`JWT_SECRET`, `ANON_KEY`, `SERVICE_ROLE_KEY`, senha do banco,
+  `DASHBOARD_PASSWORD`) são gerados novos e vão pelo `cloudez_set_env`, nunca para
+  o arquivo. `SUPABASE_PUBLIC_URL`, `API_EXTERNAL_URL` e `SITE_URL` são
+  `https://<domínio>`.
+
+**O Studio vai sempre junto, em `studio.<domínio>`.** Ele é um alias do mesmo
+site, e não um site a mais: grave-o com `cloudez_configure_site(domain,
+add_aliases: ["studio.<domínio>"])`, depois de o usuário concordar com o
+subdomínio. A API acrescenta também `www.studio.<domínio>` e pede o certificado de
+novo sozinha. O DNS do subdomínio precisa apontar para a Cloudez como o do
+domínio; diga isso ao usuário.
+
+Na raiz do subdomínio, o Studio roda com a imagem oficial `supabase/studio`, sem
+build próprio. Não use um subdiretório como `/studio`: o caminho base dele é
+fixado no build, e a imagem oficial sai sem ele. Quem pede senha é o gateway, e
+não o Studio: a rota do host `studio.<domínio>` exige o usuário e a senha do
+dashboard, e a porta do Studio nunca é publicada no host. O Studio nunca fica
+exposto sem senha.
+
+Se o usuário só quer hospedar a aplicação na Cloudez e continuar usando o
+Supabase da supabase.com, nada disso se aplica: a aplicação segue apontando para
+lá.
 
 ## 3. As restrições que não são negociáveis
 
@@ -237,6 +292,9 @@ O deploy lê a configuração **efetiva** (base + sobreposição, já mescladas)
 bind relativo que sobreviver vira um diretório em `<root>/shared/`, com o caminho
 dentro da release trocado por um symlink refeito a cada deploy — o modelo do
 Capistrano. `shared/` é irmão de `releases/`, então a poda não o alcança.
+
+Bind de **arquivo** não entra: é configuração, e fica na release como o resto do
+código.
 
 Duas coisas nunca entram, e pelo mesmo motivo — são a aplicação, não o dado:
 
