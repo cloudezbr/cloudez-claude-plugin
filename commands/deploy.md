@@ -75,9 +75,12 @@ cloudez_get_site(domain: "<domain>")
 - **`match: "exact"` com `stack` que não é `claude` nem `container_docker`** — o
   site já existe na Cloudez com outro tipo. Diga isso em uma frase, nos termos do
   usuário ("o meusite.com.br já existe na Cloudez como WordPress; para publicar
-  este projeto nele, ele precisa ser convertido"), e execute o
-  `/cloudez:convert <domain>`. Ele cria a config, converte e termina no deploy:
-  não volte a este comando.
+  este projeto nele, ele precisa ser convertido"), e **pergunte** se ele quer
+  converter, como no passo 3 do `commands/convert.md`, com o aviso de que pode
+  haver breves períodos de downtime. Pedir o deploy não é aceitar a conversão.
+  **Se aceitar**, execute o `/cloudez:convert <domain>`: ele cria a config,
+  converte e termina no deploy, então não volte a este comando. **Se recusar**,
+  pare.
 - **`match: "exact"` com `claude` ou `container_docker`** — o site já está pronto
   para receber o projeto. Execute o `/cloudez:setup <domain>` e, quando ele
   terminar, siga daqui do passo 1, com a config que ele criou.
@@ -122,7 +125,9 @@ Eles não estão no `.cloudez.yaml` de propósito — [A1](#a1).
 
 **`stack` que não é `claude` nem `container_docker`** (WordPress, html, ...) —
 **pare.** Diga que, para publicar nele, o site precisa ser convertido para o tipo
-Claude, e ofereça o `/cloudez:convert` — [A16](#a16).
+Claude, e **pergunte** se ele quer converter, como no passo 3 do
+`commands/convert.md`, com o aviso de que pode haver breves períodos de downtime.
+Se aceitar, execute o `/cloudez:convert`; se recusar, pare. Ver [A16](#a16).
 
 **`framework_missing`** — siga a instrução do campo aqui, antes do passo 2: leia
 o projeto e grave só o `framework` com `cloudez_configure_site`, sem perguntar e

@@ -292,7 +292,9 @@ sem erro nenhum. É a falha mais confusa que este plugin consegue produzir, e a
 razão desta checagem existir.
 
 Diga que, para publicar nele, o site precisa ser convertido para o tipo **Claude**,
-e ofereça o `/cloudez:convert`. **Se aceitar**, execute-o: ele cobre o que falta
+e **pergunte** se ele quer converter, como no passo 3 do `commands/convert.md`,
+com o aviso de que pode haver breves períodos de downtime. **Se aceitar**, execute
+o `/cloudez:convert`: ele cobre o que falta
 deste setup (chave SSH e Compose) e termina no deploy, então não volte aos passos
 6 e 7. **Se recusar**, pare aqui. Não converta por conta própria — a conversão
 tira o site atual do ar, e não é reversível por um comando nosso.

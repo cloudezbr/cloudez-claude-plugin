@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.26 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.27 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -29307,7 +29307,12 @@ async function checkDns(domain, opts = {}) {
 
 // src/convert.ts
 var DOMINIO_OK = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;
-async function convertSite(domain) {
+async function convertSite(domain, userConfirmed) {
+  if (userConfirmed !== true) {
+    throw new ToolError("confirmation_required", "A convers\xE3o n\xE3o foi feita: falta o aceite do usu\xE1rio.", {
+      hint: "Pergunte ao usu\xE1rio, com AskUserQuestion, se ele quer converter o site para o tipo Claude, avisando que pode haver breves per\xEDodos de downtime. S\xF3 chame de novo, com user_confirmed: true, se ele aceitar."
+    });
+  }
   const dominio = String(domain ?? "").trim().toLowerCase();
   if (!DOMINIO_OK.test(dominio)) {
     throw new ToolError("invalid_argument", `'${domain}' n\xE3o \xE9 um dom\xEDnio v\xE1lido.`, {
@@ -30089,7 +30094,7 @@ async function resolvePanelHosts() {
 var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, descoberta lendo as depend\xEAncias do projeto. Precisa ser um valor desta lista, escrito exatamente como nela; outro valor \xE9 recusado. Prefira o framework \xE0 linguagem (nextjs a nodejs, django a python) e use a linguagem s\xF3 quando o projeto n\xE3o usar framework nenhum da lista. Site est\xE1tico, s\xF3 HTML, CSS e JavaScript sem framework, \xE9 html. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.2.26"
+  version: "0.2.27"
 });
 server.registerTool(
   "cloudez_auth_status",
@@ -30720,15 +30725,16 @@ server.registerTool(
   "cloudez_convert_site",
   {
     title: "Converter um site da Cloudez para o tipo Claude",
-    description: "Converte um site que j\xE1 existe na Cloudez (WordPress, html, ou outro tipo) para o tipo claude, o \xFAnico em que este plugin publica, e move o conte\xFAdo atual de ~/<domain>/www para ~/<domain>/www/bkp-<data>/. Chame quando cloudez_get_site devolver um `stack` que n\xE3o \xE9 claude nem container_docker e o usu\xE1rio quiser publicar nele, e S\xD3 depois de ele aceitar explicitamente: o site antigo sai do ar at\xE9 o primeiro deploy. A cloud precisa de ao menos 2 GB de RAM; abaixo disso falha com cloud_too_small sem alterar nada. O banco de dados do site n\xE3o \xE9 tocado. A convers\xE3o n\xE3o grava app_root_path nem custom_port: chame cloudez_configure_site em seguida. Se falhar com ssh_failed depois de converter, chame de novo: refaz s\xF3 o backup.",
+    description: "Converte um site que j\xE1 existe na Cloudez (WordPress, html, ou outro tipo) para o tipo claude, o \xFAnico em que este plugin publica, e move o conte\xFAdo atual de ~/<domain>/www para ~/<domain>/www/bkp-<data>/. Chame quando cloudez_get_site devolver um `stack` que n\xE3o \xE9 claude nem container_docker e o usu\xE1rio quiser publicar nele, e S\xD3 depois de perguntar a ele com AskUserQuestion se quer converter, avisando que pode haver breves per\xEDodos de downtime: o site antigo sai do ar at\xE9 o primeiro deploy. Pedir o deploy n\xE3o \xE9 aceitar a convers\xE3o. Sem user_confirmed: true, falha com confirmation_required sem alterar nada. A cloud precisa de ao menos 2 GB de RAM; abaixo disso falha com cloud_too_small sem alterar nada. O banco de dados do site n\xE3o \xE9 tocado. A convers\xE3o n\xE3o grava app_root_path nem custom_port: chame cloudez_configure_site em seguida. Se falhar com ssh_failed depois de converter, chame de novo: refaz s\xF3 o backup.",
     inputSchema: object({
-      domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml")
+      domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml"),
+      user_confirmed: boolean2().optional().describe("true s\xF3 depois de o usu\xE1rio responder sim \xE0 pergunta de convers\xE3o, com o aviso de downtime.")
     }),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true }
   },
-  async ({ domain }) => {
+  async ({ domain, user_confirmed }) => {
     try {
-      return okResult({ ...await convertSite(domain) });
+      return okResult({ ...await convertSite(domain, user_confirmed === true) });
     } catch (err) {
       return errorResult(err);
     }

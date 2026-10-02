@@ -50,9 +50,31 @@ Pelo `stack`:
   ofereça o `/cloudez:deploy`. Fim.
 - **`claude` sem esse `app_root_path`** — uma conversão anterior não chegou ao fim.
   Siga normalmente: a tool do passo 6 percebe e só termina o que faltou.
-- **qualquer outro** (`wordpress`, `html`, ...) — é o caso deste comando. Siga.
+- **qualquer outro** (`wordpress`, `html`, ...) — é o caso deste comando. Vá direto para o passo 3.
 
-## 3. O projeto tem Compose?
+## 3. Perguntar se o usuário quer converter
+
+**Sempre pergunte, logo depois de identificar o tipo**, antes de qualquer outra
+coisa: nada de Compose, chave SSH ou backup antes da resposta. Vale também quando
+este comando foi aberto pelo `/cloudez:deploy` ou pelo `/cloudez:setup`, e quando
+o pedido do usuário foi "publica" ou "faz o deploy": pedir o deploy não é aceitar
+a conversão. A única exceção é o usuário já ter respondido sim a esta mesma
+pergunta, com o aviso de downtime, nesta conversa.
+
+Com AskUserQuestion, pergunte se ele quer converter o site para o tipo Claude, e
+diga em termos do que acontece, sem nome de campo ou arquivo:
+
+- **pode haver breves períodos de downtime**: o site sai do ar na conversão e
+  volta quando o deploy terminar, em seguida;
+- o conteúdo atual do site vai para uma pasta de backup **no próprio servidor**
+  (`www/bkp-<data>/`), e nada é apagado;
+- o **banco de dados não é tocado**;
+- voltar ao tipo antigo não é algo que este plugin faça.
+
+Opções: converter e publicar, ou cancelar. **Sem aceite explícito, pare.** É a
+única etapa deste plugin que tira do ar um site que estava funcionando.
+
+## 4. O projeto tem Compose?
 
 ```
 cloudez_find_compose(directory: "<diretório do projeto>")
@@ -66,19 +88,6 @@ deploy.
 Guarde a porta que o Compose publica (`ports[].published`): é a `custom_port` do
 passo 7.
 
-## 4. Confirmar com o usuário
-
-Com AskUserQuestion, diga em termos do que acontece, sem nome de campo ou arquivo:
-
-- o site **sai do ar agora** e volta quando o deploy terminar, em seguida;
-- o conteúdo atual do site vai para uma pasta de backup **no próprio servidor**
-  (`www/bkp-<data>/`) — nada é apagado;
-- o **banco de dados não é tocado**;
-- voltar ao tipo antigo não é algo que este plugin faça.
-
-Opções: converter e publicar agora, ou cancelar. **Sem aceite explícito, pare** —
-é a única etapa deste plugin que tira do ar um site que estava funcionando.
-
 ## 5. Chave SSH desta máquina
 
 O backup e o deploy conectam por SSH. Siga o passo 6 do `commands/setup.md`, lendo
@@ -90,7 +99,7 @@ servidor: um `ssh_failed` no passo 6 logo depois disso é esse atraso.
 ## 6. Converter
 
 ```
-cloudez_convert_site(domain: "<domain>")
+cloudez_convert_site(domain: "<domain>", user_confirmed: true)
 ```
 
 A tool troca o tipo e, só depois de confirmar a troca, move o conteúdo do site
@@ -109,14 +118,14 @@ tool de novo: ela refaz só o backup. Não siga para o deploy sem o backup feito
 
 ## 7. Configurar o site
 
-O usuário já aceitou a saída do ar no passo 4, então isto não pede um segundo
+O usuário já aceitou a saída do ar no passo 3, então isto não pede um segundo
 aceite:
 
 ```
 cloudez_configure_site(
   domain: "<domain>",
   app_root_path: "claude/current",
-  custom_port: "<a porta do passo 3>",
+  custom_port: "<a porta do passo 4>",
   framework: "<o framework do projeto, escolhido como no passo 2 do setup>"
 )
 ```
@@ -127,5 +136,5 @@ publicaria sem aparecer.
 ## 8. Publicar
 
 Execute o `/cloudez:deploy` com o mesmo environment, sem perguntar de novo: o
-aceite do passo 4 já foi para converter **e** publicar. É o deploy que traz o site
+aceite do passo 3 já foi para converter **e** publicar. É o deploy que traz o site
 de volta ao ar.

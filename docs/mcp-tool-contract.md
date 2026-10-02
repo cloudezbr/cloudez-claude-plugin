@@ -1806,9 +1806,20 @@ então. É a tool do `/cloudez:convert`.
 
 ```jsonc
 // input
-{ "type": "object", "properties": { "domain": { "type": "string" } },
+{ "type": "object",
+  "properties": {
+    "domain": { "type": "string" },
+    "user_confirmed": { "type": "boolean", "description": "true só depois de o usuário aceitar a conversão." }
+  },
   "required": ["domain"], "additionalProperties": false }
 ```
+
+**Sem `user_confirmed: true`, nada acontece.** A tool falha com
+`confirmation_required` antes de qualquer chamada à API. O aceite vem de uma
+pergunta ao usuário, feita assim que o tipo do site é identificado, com o aviso de
+que pode haver breves períodos de downtime. Pedir o deploy não é aceitar a
+conversão. O campo não impede um modelo de declarar um aceite que não houve, mas
+obriga a declaração a existir na chamada, onde ela fica visível.
 
 ```jsonc
 // output
@@ -1956,6 +1967,7 @@ Códigos previstos:
 | `trial_already_exists` | não | a conta já tem um cloud trial; confira `cloudez_list_clouds` em vez de criar outro |
 | `cloud_limit_reached` | não | limite de clouds da conta; a Cloudez pede para contatar o suporte |
 | `site_creation_unconfirmed` | não | o POST de `cloudez_create_site` falhou depois de enviado; o site pode ter sido criado mesmo assim — confira `cloudez_get_site` com o mesmo domínio antes de repetir |
+| `confirmation_required` | não | `cloudez_convert_site` chamada sem `user_confirmed: true`; nada foi alterado. Pergunte ao usuário antes |
 | `cloud_too_small` | não | a cloud do site tem menos RAM que o mínimo do tipo `claude`; `cloudez_convert_site` não alterou nada |
 
 O campo `retryable` importa: sem ele o modelo ou desiste de erro transitório ou
