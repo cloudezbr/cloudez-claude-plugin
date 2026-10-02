@@ -15,7 +15,8 @@ Chame `cloudez_auth_status`. Com `authenticated: false`, **execute o
 `/cloudez:login` primeiro** e só depois siga para o comando desta skill.
 
 **Execute o comando `/cloudez:convert`**, repassando o environment se o usuário o
-tiver mencionado. Não confira o projeto por conta própria antes disso — o comando
+tiver mencionado. Ele pergunta se o usuário quer converter antes de qualquer
+alteração; nunca converta sem essa pergunta. Não confira o projeto por conta própria antes disso — o comando
 já faz essa leitura. E se fizer, o resultado **nunca** aparece na conversa: nada
 de citar nome de arquivo ou de campo.
 
