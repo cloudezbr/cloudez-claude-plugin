@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.25 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.26 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -27739,6 +27739,26 @@ async function getSite(domain) {
   };
 }
 var CONFIGURABLE_SLUGS = ["app_root_path", "custom_port", "framework"];
+function aliasesOf(item) {
+  const texto = valueOf(item, "aliases") ?? "";
+  return new Set(texto.toLowerCase().split(/[\s,]+/).filter((alias) => alias !== ""));
+}
+function semWww(host) {
+  return host.replace(/^www\./, "");
+}
+function parseAliases(pedidos) {
+  const aliases = pedidos.map((pedido) => {
+    const host = normalizeHost(pedido);
+    if (!host) {
+      throw new ToolError("invalid_argument", `'${pedido}' n\xE3o \xE9 um nome de host v\xE1lido para alias.`, {
+        hint: "Passe s\xF3 o host, como 'studio.meusite.com.br': letras, n\xFAmeros, h\xEDfens e pelo menos um ponto."
+      });
+    }
+    return semWww(host);
+  });
+  return [...new Set(aliases)];
+}
+var sorted = (aliases) => [...aliases].sort();
 async function getSiteById(id) {
   const numero = Number(id);
   if (!Number.isInteger(numero) || numero <= 0) {
@@ -27776,6 +27796,7 @@ async function configureSite(domain, desejado) {
   if (desejado.framework !== void 0 && !isKnownFramework(desejado.framework)) {
     throw invalidFramework(desejado.framework);
   }
+  const aliasesPedidos = parseAliases(desejado.add_aliases ?? []);
   const before = await getSite(domain);
   if (before.match !== "exact") {
     throw new ToolError("site_not_found", `Nenhum site com o dom\xEDnio '${domain}' nesta conta.`, {
@@ -27791,11 +27812,24 @@ async function configureSite(domain, desejado) {
   const pendentes = CONFIGURABLE_SLUGS.filter(
     (slug) => desejado[slug] !== void 0 && desejado[slug] !== anterior[slug]
   );
+  const proprio = aliasesPedidos.find((alias) => alias === semWww(site.domain));
+  if (proprio) {
+    throw new ToolError("invalid_argument", `'${proprio}' \xE9 o dom\xEDnio do pr\xF3prio site, n\xE3o um alias.`, {
+      hint: "O dom\xEDnio principal e o www dele j\xE1 s\xE3o servidos pelo site. Passe s\xF3 os outros hosts."
+    });
+  }
+  const aliasesAntes = aliasesOf(before.raw);
+  const aliasesNovos = aliasesPedidos.filter((alias) => !aliasesAntes.has(alias));
+  const valoresPendentes = [
+    ...pendentes.map((slug) => ({ slug, value: desejado[slug] })),
+    ...aliasesNovos.length > 0 ? [{ slug: "aliases", value: [...aliasesAntes, ...aliasesNovos].join(" ") }] : []
+  ];
   const resultado = { domain: site.domain, changed: [] };
   for (const slug of CONFIGURABLE_SLUGS) {
     if (desejado[slug] !== void 0) resultado[slug] = desejado[slug];
   }
-  if (pendentes.length === 0) return resultado;
+  if (aliasesPedidos.length > 0) resultado.aliases = sorted(aliasesAntes);
+  if (valoresPendentes.length === 0) return resultado;
   if (site.id === void 0) {
     throw new ToolError("upstream_unavailable", "A API n\xE3o devolveu o id do site, ent\xE3o n\xE3o h\xE1 como alter\xE1-lo.", {
       retryable: false,
@@ -27803,11 +27837,7 @@ async function configureSite(domain, desejado) {
     });
   }
   const slugsBefore = slugsOf(before.raw);
-  await apiPatch(
-    sitePatchPath(site.id),
-    { values: pendentes.map((slug) => ({ slug, value: desejado[slug] })) },
-    websiteUpdateTimeoutMs()
-  );
+  await apiPatch(sitePatchPath(site.id), { values: valoresPendentes }, websiteUpdateTimeoutMs());
   let after;
   try {
     after = await getSite(domain);
@@ -27837,10 +27867,28 @@ async function configureSite(domain, desejado) {
       hint: `Slugs que existiam antes e n\xE3o voltaram: ${lost.join(", ")}. O PATCH com \`values\` parece SUBSTITUIR a lista em vez de atualiz\xE1-la. Avise o usu\xE1rio para conferir a configura\xE7\xE3o do site no painel da Cloudez.`
     });
   }
+  const aliasesDepois = after.match === "exact" ? aliasesOf(after.raw) : /* @__PURE__ */ new Set();
+  const aliasesAusentes = aliasesNovos.filter((alias) => !aliasesDepois.has(alias));
+  const aliasesPerdidos = [...aliasesAntes].filter((alias) => !aliasesDepois.has(alias));
+  if (aliasesAusentes.length > 0 || aliasesPerdidos.length > 0) {
+    const detalhe = [
+      ...aliasesAusentes.length > 0 ? [`Aliases pedidos que n\xE3o apareceram: ${aliasesAusentes.join(", ")}`] : [],
+      ...aliasesPerdidos.length > 0 ? [`Aliases que existiam antes e sumiram: ${aliasesPerdidos.join(", ")}`] : []
+    ].join("; ");
+    throw new ToolError("upstream_unavailable", "A Cloudez aceitou a altera\xE7\xE3o mas os aliases n\xE3o ficaram como pedido.", {
+      retryable: false,
+      hint: `${detalhe}. N\xC3O diga ao usu\xE1rio que os aliases foram adicionados. Avise-o para conferir os aliases do site no painel da Cloudez.`
+    });
+  }
   resultado.changed = [...pendentes];
   for (const slug of pendentes) {
     const antes = anterior[slug];
     if (antes !== void 0) resultado[`previous_${slug}`] = antes;
+  }
+  if (aliasesNovos.length > 0) {
+    resultado.changed.push("aliases");
+    resultado.aliases = sorted(aliasesDepois);
+    if (aliasesAntes.size > 0) resultado.previous_aliases = sorted(aliasesAntes);
   }
   return resultado;
 }
@@ -28523,7 +28571,8 @@ function linkSharedScript(root, dirs, prevRelease) {
     const P = prevRelease ? `'${prevRelease}/${nome}'` : "";
     const daAnterior = P ? `  if [ -d ${P} ] && [ ! -L ${P} ]; then cp -a ${P} ${S}; echo "SEEDED_PREV ${nome}";
   el` : `  `;
-    sh += `if [ ! -e ${S} ]; then
+    sh += `if [ -f ${R} ] && [ ! -L ${R} ]; then :; else
+if [ ! -e ${S} ]; then
   mkdir -p "$(dirname ${S})"
 ${daAnterior}if [ -d ${R} ] && [ ! -L ${R} ]; then cp -a ${R} ${S}; echo "SEEDED ${nome}";
   else mkdir -p ${S}; fi
@@ -28533,6 +28582,7 @@ rm -rf ${R}
 mkdir -p "$(dirname ${R})"
 ln -s ${S} ${R}
 echo "SHARED ${nome}"
+fi
 `;
   }
   return sh;
@@ -30039,7 +30089,7 @@ async function resolvePanelHosts() {
 var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, descoberta lendo as depend\xEAncias do projeto. Precisa ser um valor desta lista, escrito exatamente como nela; outro valor \xE9 recusado. Prefira o framework \xE0 linguagem (nextjs a nodejs, django a python) e use a linguagem s\xF3 quando o projeto n\xE3o usar framework nenhum da lista. Site est\xE1tico, s\xF3 HTML, CSS e JavaScript sem framework, \xE9 html. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.2.25"
+  version: "0.2.26"
 });
 server.registerTool(
   "cloudez_auth_status",
@@ -30148,19 +30198,22 @@ server.registerTool(
 server.registerTool(
   "cloudez_configure_site",
   {
-    title: "Ajustar document root, porta e framework do site na Cloudez",
-    description: `Ajusta na Cloudez os dois valores de que o deploy deste plugin depende, numa escrita s\xF3: o app_root_path (diret\xF3rio que o servidor web entrega, precisa valer '${EXPECTED_APP_ROOT_PATH}') e a custom_port (porta do host para onde o nginx encaminha '/', precisa valer '${DEFAULT_CUSTOM_PORT}'). Tamb\xE9m grava o framework, quando o site ainda n\xE3o o tem ou ele n\xE3o descreve mais o projeto. Passe s\xF3 o que quiser alterar; o que j\xE1 estiver correto n\xE3o gasta escrita. Para app_root_path e custom_port, chame S\xD3 depois de o usu\xE1rio aceitar explicitamente: mudar o document root altera o que o site serve, e um site apontado para um diret\xF3rio ainda vazio fica fora do ar at\xE9 o primeiro deploy. O framework sozinho n\xE3o muda o que o site serve e n\xE3o pede esse aceite: quando o cloudez_get_site trouxer framework_missing, grave-o direto. Se falhar dizendo que o valor n\xE3o mudou, n\xE3o afirme ao usu\xE1rio que a configura\xE7\xE3o foi ajustada, e n\xE3o fa\xE7a deploy contando com isso.`,
+    title: "Ajustar document root, porta, framework e aliases do site na Cloudez",
+    description: `Ajusta na Cloudez os dois valores de que o deploy deste plugin depende, numa escrita s\xF3: o app_root_path (diret\xF3rio que o servidor web entrega, precisa valer '${EXPECTED_APP_ROOT_PATH}') e a custom_port (porta do host para onde o nginx encaminha '/', precisa valer '${DEFAULT_CUSTOM_PORT}'). Tamb\xE9m grava o framework, quando o site ainda n\xE3o o tem ou ele n\xE3o descreve mais o projeto. Tamb\xE9m adiciona aliases de dom\xEDnio, quando o mesmo site precisa responder por outro host, como studio.<domain> para o Supabase Studio. S\xF3 adiciona, nunca remove: os aliases que j\xE1 existem continuam. A Cloudez acrescenta sozinha o www.<alias> de cada um. O DNS do alias precisa apontar para a Cloudez como o do dom\xEDnio principal, sen\xE3o o host n\xE3o chega ao site. Passe s\xF3 o que quiser alterar; o que j\xE1 estiver correto n\xE3o gasta escrita. Para app_root_path, custom_port e add_aliases, chame S\xD3 depois de o usu\xE1rio aceitar explicitamente: mudar o document root altera o que o site serve, e um site apontado para um diret\xF3rio ainda vazio fica fora do ar at\xE9 o primeiro deploy. O framework sozinho n\xE3o muda o que o site serve e n\xE3o pede esse aceite: quando o cloudez_get_site trouxer framework_missing, grave-o direto. Se falhar dizendo que o valor n\xE3o mudou ou que os aliases n\xE3o ficaram como pedido, n\xE3o afirme ao usu\xE1rio que a configura\xE7\xE3o foi ajustada, e n\xE3o fa\xE7a deploy contando com isso.`,
     inputSchema: object({
       domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml"),
       app_root_path: string2().optional().describe(`Novo document root, relativo a ~/<domain>/www. Normalmente '${EXPECTED_APP_ROOT_PATH}'.`),
       custom_port: string2().optional().describe(`Porta do host que o nginx encaminha para '/'. Neste plugin, sempre '${DEFAULT_CUSTOM_PORT}'.`),
-      framework: string2().optional().describe(`${FRAMEWORK_DESCRIPTION} S\xF3 existe no tipo claude.`)
+      framework: string2().optional().describe(`${FRAMEWORK_DESCRIPTION} S\xF3 existe no tipo claude.`),
+      add_aliases: array(string2()).optional().describe(
+        "Hosts a adicionar como alias do site, sem protocolo nem caminho, como ['studio.meusite.com.br']. N\xE3o pode ser o dom\xEDnio do site nem o www dele."
+      )
     }),
     annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true }
   },
-  async ({ domain, app_root_path, custom_port, framework }) => {
+  async ({ domain, app_root_path, custom_port, framework, add_aliases }) => {
     try {
-      return okResult({ ...await configureSite(domain, { app_root_path, custom_port, framework }) });
+      return okResult({ ...await configureSite(domain, { app_root_path, custom_port, framework, add_aliases }) });
     } catch (err) {
       return errorResult(err);
     }

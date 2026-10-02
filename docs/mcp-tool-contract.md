@@ -517,7 +517,8 @@ document root.
     "domain": { "type": "string" },
     "app_root_path": { "type": "string", "description": "Relativo a ~/<domain>/www. Normalmente 'claude/current'." },
     "custom_port": { "type": "string", "description": "Porta do host que o nginx encaminha para '/'. Default do plugin: '3000'." },
-    "framework": { "type": "string", "description": "Tecnologia da aplicação, um valor da lista. Só existe no tipo claude." }
+    "framework": { "type": "string", "description": "Tecnologia da aplicação, um valor da lista. Só existe no tipo claude." },
+    "add_aliases": { "type": "array", "items": { "type": "string" }, "description": "Hosts a adicionar como alias, como ['studio.meusite.com.br']." }
   },
   "required": ["domain"],
   "additionalProperties": false
@@ -532,6 +533,16 @@ descreve mais o projeto. As regras do valor são as de `cloudez_create_site`
 root e a porta pedem: não muda o que o site serve. É assim que o
 `framework_missing` do `cloudez_get_site` (§3.3) é atendido.
 
+O `add_aliases` acrescenta hosts para o mesmo site responder, como o
+`studio.<domínio>` do Supabase Studio. **Só acrescenta, nunca remove.** A API
+guarda os aliases numa string só, e o PATCH a substitui inteira, então a tool
+manda a união dos atuais com os novos. Um alias que já existe não gasta escrita.
+A própria API tira o `www.` de cada alias, acrescenta o `www.<alias>`, e pede o
+certificado de novo quando a lista muda. Host inválido, ou o domínio do site e o
+`www` dele, são recusados antes de qualquer escrita. Como o document root e a
+porta, o alias pede o aceite do usuário. O DNS dele precisa apontar para a
+Cloudez como o do domínio.
+
 **O PATCH tem timeout próprio, de 60s** (`CLOUDEZ_WEBSITE_UPDATE_TIMEOUT`), e não
 os 10s das outras chamadas. Alterar o site passa pelos mesmos sinais do `save()`
 que a criação (§3.21): visto na prática, gravar só o `framework` estourou os 10s
@@ -544,6 +555,9 @@ duas vezes seguidas no mesmo site, e o valor não foi aplicado nenhuma das duas.
   "previous_app_root_path": "public_html",
   "changed": ["app_root_path"] }
 ```
+
+Pedindo aliases, o retorno traz `aliases` com a lista inteira depois da escrita
+e, quando havia algum antes, `previous_aliases`.
 
 `changed` é a **lista** dos slugs efetivamente escritos, e não um booleano: com
 dois campos, "mudou" sozinho não diz qual. Lista vazia significa que tudo já
@@ -576,6 +590,9 @@ PATCH /v3/website/<id>/
    depois da escrita, isso **não** vira `site_not_found`: ele respondeu um
    instante antes, e o erro mandaria o usuário procurar no painel um problema que
    a ferramenta pode ter causado.
+
+Pedindo aliases, a releitura confere também que cada alias novo apareceu e que
+nenhum dos que existiam sumiu. Falhando qualquer uma, a tool não reporta sucesso.
 
 **A tool não decide sozinha.** Quem chama precisa ter perguntado ao usuário: a
 mudança vale na hora, e até o primeiro deploy o diretório `claude/current` ainda
