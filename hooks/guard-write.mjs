@@ -18,15 +18,19 @@
  *
  * Fecha só as vias enumeráveis (`curl`, `wget` pela tool Bash), não
  * `python -c "requests.post(...)"` nem a tool de outro MCP.
+ *
+ * Age só num projeto com `.cloudez.yaml`, e só sobre os hosts da aplicação
+ * dele: os incidentes foram na aplicação publicada, e barrar Slack ou a API
+ * de terceiros não protege nada que o plugin publique.
  */
 
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-import { escritaRemota, hash } from "./_guard.mjs"
+import { dominiosDoProjeto, escritaRemota, hash, protegido } from "./_guard.mjs"
 
-// Minutos de validade. Curto porque a aprovação vale para UM comando.
+// Minutos de validade da aprovação por comando. Curto porque ela vale para UM comando.
 export const TTL_MIN = 10
 
 /**
@@ -37,24 +41,27 @@ const DIR = process.env.CLOUDEZ_GUARD_DIR || join(homedir(), ".cloudez")
 const PENDENTE = join(DIR, "pending-write.json")
 const APROVADO = join(DIR, "approved-write.json")
 
+/**
+ * Desligado por quem configura o Claude Code (o `env` do settings.json, ou o shell que o abriu).
+ * O agente não alcança isto prefixando o comando: o hook roda antes, com o próprio ambiente.
+ */
+if (process.env.CLOUDEZ_GUARD === "off") process.exit(0)
+
 const chamada = interpretar(await lerStdin())
 const comando = chamada?.tool_input?.command
 
 // Só a tool Bash; as demais não passam por aqui.
 if (chamada?.tool_name !== "Bash" || typeof comando !== "string") process.exit(0)
 
-const alvos = escritaRemota(comando)
+const dominios = dominiosDoProjeto(chamada?.cwd || process.cwd())
+if (!dominios) process.exit(0)
+
+const alvos = escritaRemota(comando).filter((host) => protegido(host, dominios))
 if (alvos.length === 0) process.exit(0)
 
 const digest = hash(comando)
 
-if (aprovado(digest)) {
-  // Uso único: some ao ser usada, senão "por comando" viraria "por TTL".
-  try {
-    unlinkSync(APROVADO)
-  } catch {}
-  process.exit(0)
-}
+if (liberar(digest, alvos)) process.exit(0)
 
 registrarPendente(comando, digest, alvos)
 process.stderr.write(motivo(alvos))
@@ -67,8 +74,9 @@ export function motivo(alvos) {
     "recado de teste num mural público e uma imagem num site de uploads. A\n" +
     "verificação por leitura (GET/HEAD) continua liberada, e localhost também.\n\n" +
     "Se a escrita for mesmo necessária, quem libera é o usuário, no terminal dele:\n\n" +
-    "    cloudez-approve\n\n" +
-    `A aprovação vale para este comando exato, uma vez só, por ${TTL_MIN} minutos.\n` +
+    "    cloudez-approve           este comando exato, uma vez só\n" +
+    "    cloudez-approve --host    estes hosts, por um tempo que ele escolhe\n\n" +
+    `Sem uso, a aprovação de um comando expira em ${TTL_MIN} minutos.\n` +
     "NÃO tente emitir você mesmo: o comando exige terminal e falha sem ele — é\n" +
     "isso que faz a aprovação significar 'um humano decidiu'.\n"
   )
@@ -83,15 +91,46 @@ function interpretar(txt) {
   }
 }
 
-function aprovado(digest) {
+/**
+ * As aprovações em disco. O arquivo antigo, de um comando só (`{hash, at}`), continua valendo.
+ * Por comando: `{kind: "command", hash, at}`. Por host: `{kind: "host", host, until}`.
+ */
+function aprovacoes() {
   let a
   try {
     a = JSON.parse(readFileSync(APROVADO, "utf8"))
   } catch {
-    return false
+    return []
   }
-  if (a?.hash !== digest) return false
-  return (Date.now() - Number(a.at || 0)) / 60000 < TTL_MIN
+  if (Array.isArray(a?.approvals)) return a.approvals
+  return a?.hash ? [{ kind: "command", hash: a.hash, at: a.at }] : []
+}
+
+/**
+ * Libera pela aprovação do comando exato, que é consumida ao ser usada, ou por hosts liberados
+ * que cubram todos os alvos. Aprovação vencida sai do arquivo aqui.
+ */
+function liberar(digest, alvos) {
+  const agora = Date.now()
+  const vigentes = aprovacoes().filter((a) =>
+    a.kind === "host" ? Number(a.until) > agora : (agora - Number(a.at || 0)) / 60000 < TTL_MIN,
+  )
+
+  const doComando = vigentes.find((a) => a.kind === "command" && a.hash === digest)
+  const hostsLiberados = new Set(vigentes.filter((a) => a.kind === "host").map((a) => a.host))
+  const porHost = alvos.every((host) => hostsLiberados.has(host))
+
+  // Uso único: a do comando some ao ser usada, senão "por comando" viraria "por TTL".
+  const restantes = doComando ? vigentes.filter((a) => a !== doComando) : vigentes
+  gravarAprovacoes(restantes)
+  return Boolean(doComando) || porHost
+}
+
+function gravarAprovacoes(lista) {
+  try {
+    if (lista.length === 0) unlinkSync(APROVADO)
+    else writeFileSync(APROVADO, JSON.stringify({ approvals: lista }, null, 2), { mode: 0o600 })
+  } catch {}
 }
 
 /**

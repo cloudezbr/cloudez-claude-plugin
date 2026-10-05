@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Uso: cloudez-approve
+ * Uso: cloudez-approve                       libera o comando bloqueado, uma vez só
+ *      cloudez-approve --host [--minutes N]  libera os hosts dele por N minutos (padrão 30, máximo 60)
  *
  * Libera uma escrita remota que o hook `hooks/guard-write.mjs` bloqueou.
  *
@@ -24,10 +25,14 @@ import { createInterface } from "node:readline"
 import { die, ok } from "./_out.mjs"
 
 const TTL_MIN = 10
+const HOST_MIN_PADRAO = 30
+const HOST_MIN_MAX = 60
 // Ver a nota em `hooks/guard-write.mjs`: isola a suíte do `~/.cloudez` real.
 const DIR = process.env.CLOUDEZ_GUARD_DIR || join(homedir(), ".cloudez")
 const PENDENTE = join(DIR, "pending-write.json")
 const APROVADO = join(DIR, "approved-write.json")
+
+const escopo = lerArgumentos(process.argv.slice(2))
 
 const terminal = abrirTerminal()
 if (!terminal) {
@@ -54,14 +59,19 @@ if (idadeMin >= TTL_MIN) {
   })
 }
 
+const hosts = p.hosts || []
+const alcance =
+  escopo.kind === "host"
+    ? `  Libera QUALQUER escrita nestes hosts por ${escopo.minutes} minutos,\n  não só o comando acima.\n\n`
+    : `  Vale uma vez só, para este comando exato, por ${TTL_MIN} minutos.\n\n`
+
 process.stderr.write(
-  "\n  Aprovação de escrita remota\n" +
-    "  ───────────────────────────\n\n" +
-    `  Host(s): ${(p.hosts || []).join(", ")}\n\n` +
+  "\n  Aprovação de escrita remota\n\n" +
+    `  Host(s): ${hosts.join(", ")}\n\n` +
     "  Comando:\n" +
     `    ${String(p.command).replace(/\n/g, "\n    ")}\n\n` +
-    "  Isto ESCREVE numa aplicação que está no ar. Vale uma vez só,\n" +
-    `  para este comando exato, por ${TTL_MIN} minutos.\n\n`,
+    "  Isto ESCREVE numa aplicação que está no ar.\n" +
+    alcance,
 )
 
 const resposta = await perguntar(terminal, "  Digite 'aprovo' para liberar: ")
@@ -70,27 +80,69 @@ if (resposta.trim().toLowerCase() !== "aprovo") {
   die("not_approved", "Aprovação cancelada — nada foi liberado.")
 }
 
+const agora = Date.now()
+const novas =
+  escopo.kind === "host"
+    ? hosts.map((host) => ({ kind: "host", host, until: agora + escopo.minutes * 60000 }))
+    : [{ kind: "command", hash: p.hash, at: agora }]
+
 mkdirSync(DIR, { recursive: true, mode: 0o700 })
-writeFileSync(APROVADO, JSON.stringify({ hash: p.hash, at: Date.now() }, null, 2), { mode: 0o600 })
+writeFileSync(APROVADO, JSON.stringify({ approvals: [...aprovacoesAtuais(), ...novas] }, null, 2), { mode: 0o600 })
 try {
   unlinkSync(PENDENTE)
 } catch {}
 
-ok({ status: "approved", hosts: p.hosts || [], expires_in_minutes: TTL_MIN, single_use: true })
+ok(
+  escopo.kind === "host"
+    ? { status: "approved", scope: "host", hosts, expires_in_minutes: escopo.minutes, single_use: false }
+    : { status: "approved", scope: "command", hosts, expires_in_minutes: TTL_MIN, single_use: true },
+)
+
+function lerArgumentos(args) {
+  if (args.length === 0) return { kind: "command" }
+  if (args[0] !== "--host") {
+    die("usage", `Argumento desconhecido: '${args[0]}'.`, {
+      hint: "Use cloudez-approve, ou cloudez-approve --host [--minutes N].",
+    })
+  }
+  if (args.length === 1) return { kind: "host", minutes: HOST_MIN_PADRAO }
+  const minutos = Number(args[2])
+  if (args[1] !== "--minutes" || args.length !== 3 || !Number.isInteger(minutos) || minutos < 1 || minutos > HOST_MIN_MAX) {
+    die("usage", `--minutes precisa ser um número inteiro de 1 a ${HOST_MIN_MAX}.`, {
+      hint: "Ex.: cloudez-approve --host --minutes 30.",
+    })
+  }
+  return { kind: "host", minutes: minutos }
+}
+
+// Mantém as aprovações ainda vigentes, no formato que o hook lê. Ver `hooks/guard-write.mjs`.
+function aprovacoesAtuais() {
+  let a
+  try {
+    a = JSON.parse(readFileSync(APROVADO, "utf8"))
+  } catch {
+    return []
+  }
+  const lista = Array.isArray(a?.approvals) ? a.approvals : a?.hash ? [{ kind: "command", hash: a.hash, at: a.at }] : []
+  return lista.filter((x) =>
+    x.kind === "host" ? Number(x.until) > agora : (agora - Number(x.at || 0)) / 60000 < TTL_MIN,
+  )
+}
 
 /**
  * Abre o terminal de controle, ou devolve `null`.
  *
  * `openSync`, não `createReadStream`: um stream é preguiçoso e não abriria
- * nada de forma síncrona, deixando o `try/catch` sem erro para pegar. Não é
- * `process.stdin.isTTY` pelo mesmo motivo do `cloudez-login`: um agente
- * satisfaz isso redirecionando.
+ * nada de forma síncrona, deixando o `try/catch` sem erro para pegar. No
+ * POSIX não é `process.stdin.isTTY`, que um agente satisfaz redirecionando.
+ * No Windows `/dev/tty` não existe, e o console é o próprio stdin, como no
+ * `cloudez-login`.
  */
 function abrirTerminal() {
   try {
     return new ReadStream(openSync("/dev/tty", "r"))
   } catch {
-    return null
+    return process.platform === "win32" && process.stdin.isTTY ? process.stdin : null
   }
 }
 

@@ -4,6 +4,11 @@
  */
 
 import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+
+// Endereços temporários que a Cloudez dá aos sites, antes do domínio próprio.
+const TEMPORARIOS = [".cloudezapp.io", ".configr.cloud"]
 
 /**
  * Os hosts remotos que este comando escreveria. Vazio significa "pode passar".
@@ -34,14 +39,18 @@ function segmentos(cmd) {
   return cmd.split(/\|\||&&|[|;\n]/)
 }
 
-// Verbo de escrita neste trecho. `-d` já é POST no curl, `-F` é upload.
+/**
+ * Verbo de escrita neste trecho. `-d` já é POST no curl, `-F` é upload.
+ * Com `-G`, `--get` ou `-X GET`, os dados vão na URL de um GET, e isso é leitura.
+ */
 function escreve(t) {
+  if (/(^|\s)-X\s*(POST|PUT|PATCH|DELETE)\b/i.test(t)) return true
+  if (/--(request|method)[=\s]+(POST|PUT|PATCH|DELETE)\b/i.test(t)) return true
+  if (/(^|\s)-[a-zA-Z]*G[a-zA-Z]*(\s|$)/.test(t) || /(^|\s)--get(\s|$)/.test(t)) return false
+  if (/(^|\s)-X\s*GET\b/i.test(t) || /--request[=\s]+GET\b/i.test(t)) return false
   return (
-    /(^|\s)-X\s*(POST|PUT|PATCH|DELETE)\b/i.test(t) ||
-    /--request[=\s]+(POST|PUT|PATCH|DELETE)\b/i.test(t) ||
     /(^|\s)-[a-zA-Z]*[dFT](\s|=)/.test(t) ||
-    /--(data|data-raw|data-binary|data-urlencode|form|upload-file|post-data|post-file)\b/.test(t) ||
-    /--method[=\s]+(POST|PUT|PATCH|DELETE)\b/i.test(t)
+    /--(data|data-raw|data-binary|data-urlencode|form|upload-file|post-data|post-file)\b/.test(t)
   )
 }
 
@@ -72,6 +81,31 @@ export function local(host) {
     host.endsWith(".localhost") ||
     host.endsWith(".local")
   )
+}
+
+/**
+ * Os domínios do `.cloudez.yaml` mais próximo de `cwd`, subindo pelos diretórios, ou `null`
+ * fora de um projeto da Cloudez. É o que limita o hook ao que o plugin publica.
+ */
+export function dominiosDoProjeto(cwd) {
+  if (typeof cwd !== "string" || cwd === "") return null
+  for (let dir = cwd; ; dir = dirname(dir)) {
+    let texto
+    try {
+      texto = readFileSync(join(dir, ".cloudez.yaml"), "utf8")
+    } catch {
+      if (dirname(dir) === dir) return null
+      continue
+    }
+    const dominios = [...texto.matchAll(/^\s*domain:\s*["']?([A-Za-z0-9.-]+)/gm)].map((m) => m[1].toLowerCase())
+    return [...new Set(dominios)]
+  }
+}
+
+// Host da aplicação do projeto: um domínio dele, um subdomínio (como o studio.) ou endereço temporário.
+export function protegido(host, dominios) {
+  if (TEMPORARIOS.some((sufixo) => host.endsWith(sufixo))) return true
+  return dominios.some((d) => host === d || host.endsWith(`.${d}`))
 }
 
 /**

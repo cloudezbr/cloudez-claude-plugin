@@ -71,6 +71,19 @@ Verifica 'o alvo nao e mais um binario por plataforma' (-not ("$saida" -match 'l
 
 Remove-Item -Recurse -Force $temp
 
+# O cloudez-approve no Windows. Sem o .cmd, o PowerShell nem acha o comando; e
+# sem console de verdade, como aqui no runner, ele tem de recusar com no_tty, e
+# não abrir o prompt nem quebrar procurando /dev/tty.
+
+$approve = Join-Path $raiz 'bin\cloudez-approve.cmd'
+Verifica 'o launcher do approve existe' (Test-Path $approve) $approve
+
+$saida = $null | & $approve 2>&1
+$codigo = $LASTEXITCODE
+
+Verifica 'approve sem console nao sai 0' ($codigo -ne 0) "veio $codigo"
+Verifica 'approve sem console recusa com no_tty' ("$saida" -match 'no_tty') "saida: $saida"
+
 if ($falhas -gt 0) {
   Write-Host ""
   Write-Host "$falhas falha(s)"
