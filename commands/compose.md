@@ -160,10 +160,23 @@ domínio; diga isso ao usuário.
 
 Na raiz do subdomínio, o Studio roda com a imagem oficial `supabase/studio`, sem
 build próprio. Não use um subdiretório como `/studio`: o caminho base dele é
-fixado no build, e a imagem oficial sai sem ele. Quem pede senha é o gateway, e
-não o Studio: a rota do host `studio.<domínio>` exige o usuário e a senha do
-dashboard, e a porta do Studio nunca é publicada no host. O Studio nunca fica
-exposto sem senha.
+fixado no build, e a imagem oficial sai sem ele.
+
+**O Studio sempre sobe com autenticação (basic auth).** Ele é a área sensível da
+aplicação: dá acesso ao banco inteiro, sem passar pelo RLS. O Studio não tem login
+próprio, então quem pede a senha é o gateway, e estas regras não têm exceção:
+
+- a rota do host `studio.<domínio>` tem basic auth em todos os caminhos, com o
+  `DASHBOARD_USERNAME` e o `DASHBOARD_PASSWORD`;
+- a senha é gerada nova, longa e aleatória, e vai pelo `cloudez_set_env`. Nunca o
+  valor de exemplo do `.env` oficial, nunca vazia, e nunca escrita no arquivo;
+- nenhuma outra rota chega ao Studio. No Compose oficial, o que não casa com
+  nenhuma rota cai no Studio; aqui esse resto vai para a aplicação;
+- a porta do Studio nunca é publicada no host.
+
+Diga ao usuário o usuário do dashboard e onde a senha está guardada (o arquivo de
+ambiente do servidor), sem mostrar a senha na conversa. O `/cloudez:deploy`
+confere, depois de cada publicação, que o Studio recusa quem chega sem a senha.
 
 Se o usuário só quer hospedar a aplicação na Cloudez e continuar usando o
 Supabase da supabase.com, nada disso se aplica: a aplicação segue apontando para

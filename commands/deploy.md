@@ -491,6 +491,36 @@ deploy que não surtiu efeito.
 **Não compare `latency_ms` nem `attempts` com os do passo 3** — o único campo
 comparável entre os dois passos é o `body_sha256`. [A4](#a4).
 
+### Supabase: o Studio precisa recusar quem chega sem senha
+
+Se o Compose tem o Studio do Supabase (imagem `supabase/studio`), este passo só
+termina depois de provar que ele está protegido. Sem credencial nenhuma, os dois
+caminhos precisam responder **401**:
+
+```
+cloudez_health_check(domain: "studio.<domain>", expect_status: 401)
+cloudez_health_check(domain: "studio.<domain>", path: "/api/platform/profile", expect_status: 401)
+```
+
+**Os dois com `healthy: true`** — o Studio pede a senha. Diga isso em uma frase.
+
+**Qualquer um com outro `status_code`** — o Studio está **exposto**, e o deploy
+**fracassou**, mesmo com o site respondendo. Não espere o usuário decidir:
+
+- **com release anterior**, faça o rollback agora (passo 10, com o passo 8 de
+  novo depois dele). A anterior passou por esta mesma checagem;
+- **sem release anterior**, diga que o Studio está aberto, corrija a rota do
+  Studio no gateway (a seção do Supabase, no passo 2 do `commands/compose.md`) e
+  publique de novo, já.
+
+Depois, rode estas duas checagens de novo. Nunca encerre o deploy dizendo que deu
+certo com o Studio aberto.
+
+**Sem `status_code`, com `error`** — o subdomínio ainda não chega ao servidor,
+quase sempre DNS. Isso **não** prova que o Studio está protegido. Diga que a
+proteção não pôde ser verificada e que o DNS de `studio.<domain>` precisa apontar
+para a Cloudez, e rode estas checagens de novo quando apontar.
+
 ### Onde ver a versão nova
 
 São dois endereços, e eles falham por motivos diferentes ([A10](#a10)):
