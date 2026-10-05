@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.27 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.28 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -30082,7 +30082,7 @@ async function resolvePanelHosts() {
 var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, descoberta lendo as depend\xEAncias do projeto. Precisa ser um valor desta lista, escrito exatamente como nela; outro valor \xE9 recusado. Prefira o framework \xE0 linguagem (nextjs a nodejs, django a python) e use a linguagem s\xF3 quando o projeto n\xE3o usar framework nenhum da lista. Site est\xE1tico, s\xF3 HTML, CSS e JavaScript sem framework, \xE9 html. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.2.27"
+  version: "0.2.28"
 });
 server.registerTool(
   "cloudez_auth_status",
