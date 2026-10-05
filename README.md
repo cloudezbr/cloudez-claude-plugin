@@ -85,6 +85,40 @@ allowlist em `.claude/settings.json`:
 
 As que mudam estado no servidor ficam de fora de propósito.
 
+## Proteção contra escrita na aplicação publicada
+
+Num projeto com `.cloudez.yaml`, o plugin bloqueia `curl` e `wget` que escrevam
+(POST, PUT, PATCH, DELETE, `-d`, `-F`) nos hosts da aplicação: os domínios do
+`.cloudez.yaml`, os subdomínios deles e os endereços temporários da Cloudez
+(`*.cloudezapp.io`, `*.configr.cloud`). Leitura passa, inclusive com `-G` ou
+`--get`, e qualquer outro host passa. Fora de um projeto da Cloudez, o hook não
+faz nada.
+
+Quando ele bloqueia, quem libera é você, no seu terminal:
+
+```sh
+cloudez-approve                        # o comando bloqueado, uma vez só
+cloudez-approve --host                 # os hosts dele, por 30 minutos
+cloudez-approve --host --minutes 60    # os hosts dele, por até 60 minutos
+```
+
+No Windows, rode no PowerShell ou no Prompt de Comando, não por duplo clique.
+
+**Para desligar só o hook**, sem desinstalar o plugin, defina `CLOUDEZ_GUARD=off`
+no ambiente do Claude Code, por exemplo no `settings.json`:
+
+```json
+{ "env": { "CLOUDEZ_GUARD": "off" } }
+```
+
+Prefixar o comando com a variável não desliga nada: o hook roda antes do comando,
+com o ambiente do Claude Code.
+
+**Se o hook continuar ativo depois de desinstalar**, o plugin ainda está ligado em
+outro escopo. Confira o `.claude/settings.json` do projeto: com
+`"cloudez@cloudez": true` em `enabledPlugins`, troque para `false` e rode
+`/reload-plugins`.
+
 ## Documentação
 
 - `commands/*.md` — o procedimento de cada comando
