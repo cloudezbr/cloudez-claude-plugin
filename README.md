@@ -7,9 +7,8 @@ Plugin do Claude Code para desenvolver e fazer deploy de sites na Cloudez.
 - [Claude Code](https://claude.com/claude-code)
 - **Node 20+** — roda o servidor MCP embutido e os adaptadores de `bin/`
 - `ssh` e `tar` na máquina local, com uma chave SSH em `~/.ssh/`
-- Uma conta na Cloudez. O site precisa ser do tipo **Claude**, numa cloud com
-  pelo menos 2 GB de RAM; um site de outro tipo (WordPress, html) é convertido
-  pelo `/cloudez:convert`
+- Uma conta na Cloudez. O site precisa ser do tipo **Claude**; um site de outro
+  tipo (WordPress, html) é convertido pelo `/cloudez:convert`
 
 Não há etapa de build nem `npm install`: o servidor MCP vem pronto em `mcp/`.
 

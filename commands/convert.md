@@ -108,10 +108,6 @@ para o backup.
 **Sucesso** — diga onde ficou o backup (`backup_path`), em uma frase. `moved: 0`
 quer dizer que não havia nada a guardar; não é erro.
 
-**`cloud_too_small`** — **pare.** A cloud tem menos RAM que o mínimo do tipo
-Claude, e **nada foi alterado**: o site continua no ar como estava. Diga o que o
-`hint` diz sobre a saída.
-
 **`ssh_failed`** — o tipo **já foi trocado**, e os arquivos continuam onde estavam.
 Diga isso, espere um minuto se a chave acabou de ser autorizada, e chame a mesma
 tool de novo: ela refaz só o backup. Não siga para o deploy sem o backup feito.

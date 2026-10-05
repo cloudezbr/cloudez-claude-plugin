@@ -1833,14 +1833,13 @@ obriga a declaração a existir na chamada, onde ela fica visível.
 ```
 
 **Endpoint:** `POST /v3/website/{id}/convert-to-claude/`, corpo vazio. A API
-confere a RAM da cloud (mínimo de 2 GB, a mesma regra da criação de site
-`claude`), cria o addon `docker` da cloud se faltar, e troca o tipo. Não grava
+cria o addon `docker` da cloud se faltar, e troca o tipo. Não grava
 `app_root_path` nem `custom_port`: isso continua com §3.4.
 
-**Converte primeiro, move os arquivos depois.** Com a ordem inversa, a recusa por
-RAM chegaria depois de o site antigo já ter saído do ar. Assim, a recusa vem como
-`cloud_too_small` sem nada alterado, e um ssh que falhe depois deixa o site
-convertido com os arquivos intactos.
+**Converte primeiro, move os arquivos depois.** Com a ordem inversa, uma recusa
+da API chegaria depois de o site antigo já ter saído do ar. Assim, a recusa vem
+sem nada alterado, e um ssh que falhe depois deixa o site convertido com os
+arquivos intactos.
 
 **Relê antes de mover.** A troca só conta depois de `cloudez_get_site` devolver
 `stack: "claude"`. Um 200 sem efeito sai como `upstream_unavailable`, sem arquivo
@@ -1864,7 +1863,7 @@ depende do site:
 O `container_docker` fica de fora porque pode estar servindo de outro diretório:
 mover o `www` dele derrubaria um site que funciona.
 
-**Erros próprios:** `cloud_too_small` (nada foi alterado), `ssh_failed` com
+**Erros próprios:** `ssh_failed` com
 `retryable: true` (o `hint` diz se o tipo já foi trocado; chamar de novo refaz só
 o backup), `missing_ssh_target`.
 
@@ -1968,8 +1967,6 @@ Códigos previstos:
 | `cloud_limit_reached` | não | limite de clouds da conta; a Cloudez pede para contatar o suporte |
 | `site_creation_unconfirmed` | não | o POST de `cloudez_create_site` falhou depois de enviado; o site pode ter sido criado mesmo assim — confira `cloudez_get_site` com o mesmo domínio antes de repetir |
 | `confirmation_required` | não | `cloudez_convert_site` chamada sem `user_confirmed: true`; nada foi alterado. Pergunte ao usuário antes |
-| `cloud_too_small` | não | a cloud do site tem menos RAM que o mínimo do tipo `claude`; `cloudez_convert_site` não alterou nada |
-
 O campo `retryable` importa: sem ele o modelo ou desiste de erro transitório ou
 insiste em erro permanente.
 

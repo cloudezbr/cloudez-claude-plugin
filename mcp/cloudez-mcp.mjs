@@ -29328,7 +29328,7 @@ async function convertSite(domain, userConfirmed) {
         hint: "Isto \xE9 um mapeamento incompleto no servidor MCP, n\xE3o um problema da conta do usu\xE1rio."
       });
     }
-    await pedirConversao(site.id);
+    await apiPost(siteConvertPath(site.id), {}, websiteUpdateTimeoutMs());
     const anterior = site.stack;
     site = await siteExato(dominio);
     if (site.stack !== APP_STACK) {
@@ -29355,18 +29355,6 @@ async function siteExato(dominio) {
     });
   }
   return found.site;
-}
-async function pedirConversao(id) {
-  try {
-    await apiPost(siteConvertPath(id), {}, websiteUpdateTimeoutMs());
-  } catch (err) {
-    if (err instanceof ToolError && err.body.error.code === "invalid_argument" && /RAM/i.test(err.body.error.message)) {
-      throw new ToolError("cloud_too_small", "A cloud deste site n\xE3o tem a RAM m\xEDnima para o tipo Claude.", {
-        hint: `${err.body.error.message} Nada foi alterado: o site continua como estava. A sa\xEDda \xE9 mover o site para uma cloud maior ou trocar o plano da cloud no painel.`
-      });
-    }
-    throw err;
-  }
 }
 async function moverWww(site, dominio, acabouDeConverter) {
   if (!site.ssh) {
@@ -30725,7 +30713,7 @@ server.registerTool(
   "cloudez_convert_site",
   {
     title: "Converter um site da Cloudez para o tipo Claude",
-    description: "Converte um site que j\xE1 existe na Cloudez (WordPress, html, ou outro tipo) para o tipo claude, o \xFAnico em que este plugin publica, e move o conte\xFAdo atual de ~/<domain>/www para ~/<domain>/www/bkp-<data>/. Chame quando cloudez_get_site devolver um `stack` que n\xE3o \xE9 claude nem container_docker e o usu\xE1rio quiser publicar nele, e S\xD3 depois de perguntar a ele com AskUserQuestion se quer converter, avisando que pode haver breves per\xEDodos de downtime: o site antigo sai do ar at\xE9 o primeiro deploy. Pedir o deploy n\xE3o \xE9 aceitar a convers\xE3o. Sem user_confirmed: true, falha com confirmation_required sem alterar nada. A cloud precisa de ao menos 2 GB de RAM; abaixo disso falha com cloud_too_small sem alterar nada. O banco de dados do site n\xE3o \xE9 tocado. A convers\xE3o n\xE3o grava app_root_path nem custom_port: chame cloudez_configure_site em seguida. Se falhar com ssh_failed depois de converter, chame de novo: refaz s\xF3 o backup.",
+    description: "Converte um site que j\xE1 existe na Cloudez (WordPress, html, ou outro tipo) para o tipo claude, o \xFAnico em que este plugin publica, e move o conte\xFAdo atual de ~/<domain>/www para ~/<domain>/www/bkp-<data>/. Chame quando cloudez_get_site devolver um `stack` que n\xE3o \xE9 claude nem container_docker e o usu\xE1rio quiser publicar nele, e S\xD3 depois de perguntar a ele com AskUserQuestion se quer converter, avisando que pode haver breves per\xEDodos de downtime: o site antigo sai do ar at\xE9 o primeiro deploy. Pedir o deploy n\xE3o \xE9 aceitar a convers\xE3o. Sem user_confirmed: true, falha com confirmation_required sem alterar nada. O banco de dados do site n\xE3o \xE9 tocado. A convers\xE3o n\xE3o grava app_root_path nem custom_port: chame cloudez_configure_site em seguida. Se falhar com ssh_failed depois de converter, chame de novo: refaz s\xF3 o backup.",
     inputSchema: object({
       domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml"),
       user_confirmed: boolean2().optional().describe("true s\xF3 depois de o usu\xE1rio responder sim \xE0 pergunta de convers\xE3o, com o aviso de downtime.")
