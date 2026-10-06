@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.29 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.31 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -28590,7 +28590,7 @@ if [ ! -e ${S} ]; then
 ${daAnterior}if [ -d ${R} ] && [ ! -L ${R} ]; then cp -a ${R} ${S}; echo "SEEDED ${nome}";
   else mkdir -p ${S}; fi
   echo "SHARED_CREATED ${nome}"
-fi
+` + (P ? mesclarDaAnterior(root, prevRelease, nome) : "") + `fi
 rm -rf ${R}
 mkdir -p "$(dirname ${R})"
 ln -s ${S} ${R}
@@ -28599,6 +28599,28 @@ fi
 `;
   }
   return sh;
+}
+function mesclarDaAnterior(root, prevRelease, nome) {
+  const S = `'${root}/shared/${nome}'`;
+  const P = `'${prevRelease}/${nome}'`;
+  const B = `'${root}/.cloudez/shared-merge/${prevRelease.split("/").pop()}/${nome}'`;
+  return `elif [ -d ${P} ] && [ ! -L ${P} ]; then
+  if [ ! -e ${B} ]; then
+    mkdir -p "$(dirname ${B})"
+    cp -al ${P} ${B} 2>/dev/null || { rm -rf ${B}; cp -a ${P} ${B}; }
+  fi
+  (cd ${P} && find . -mindepth 1) | while IFS= read -r f; do
+    if [ -e ${S}/"$f" ] || [ -L ${S}/"$f" ]; then
+      if [ -f ${P}/"$f" ] && [ ! -L ${P}/"$f" ] && [ -f ${S}/"$f" ] && ! cmp -s ${P}/"$f" ${S}/"$f"; then
+        echo "SHARED_MERGE_CONFLICT ${nome}/\${f#./}"
+      fi
+    else
+      cp -pPR ${P}/"$f" ${S}/"$f"
+    fi
+  done
+  echo "SHARED_MERGED ${nome}"
+  echo "SHARED_MERGE_BACKUP ${B.slice(1, -1)}"
+`;
 }
 function linkEnvScript() {
   const F = CLOUDEZ_ENV_FILE;
@@ -28783,6 +28805,9 @@ ${res.stderr}`;
   const shared = matchLines(res.stdout, "SHARED");
   const criados = matchLines(res.stdout, "SHARED_CREATED");
   const migrados = matchLines(res.stdout, "SEEDED_PREV");
+  const mesclados = matchLines(res.stdout, "SHARED_MERGED");
+  const backups = matchLines(res.stdout, "SHARED_MERGE_BACKUP");
+  const conflitos = matchLines(res.stdout, "SHARED_MERGE_CONFLICT");
   const envLinked = matchLine(res.stdout, "ENV_LINKED");
   state.compose = {
     project,
@@ -28800,6 +28825,9 @@ ${res.stderr}`;
      * vez por diretório.
      */
     ...migrados.length > 0 ? { shared_migrated: migrados } : {},
+    ...mesclados.length > 0 ? { shared_merged: mesclados } : {},
+    ...backups.length > 0 ? { shared_merge_backup: backups } : {},
+    ...conflitos.length > 0 ? { shared_merge_conflicts: conflitos } : {},
     ...recreated ? { recreated: recreated === "yes" } : {},
     containers
   };
@@ -29414,11 +29442,28 @@ function desconhecido(pullId2) {
 }
 
 // src/wordpress.ts
-var WP_CONFIG_SHELL = `cez_wp_define() {
+var WP_CONFIG_PHP = String.raw`$c = $argv[1]; $n = $argv[2]; $d = dirname($c);
+if (strpos(basename($d), "bkp-") === 0) $d = dirname($d);
+$t = sys_get_temp_dir() . "/cez-wp-" . getmypid(); @mkdir($t, 0700); touch("$t/wp-settings.php");
+define("ABSPATH", "$t/");
+$s = file_get_contents($c);
+$s = preg_replace("/dirname\s*\(\s*__FILE__\s*\)/", var_export($d, true), $s);
+$s = str_replace(["__DIR__", "__FILE__"], [var_export($d, true), var_export("$d/wp-config.php", true)], $s);
+ob_start(); try { eval("?>" . $s); } catch (Throwable $e) {} ob_end_clean();
+@unlink("$t/wp-settings.php"); @rmdir($t);
+if ($n === "table_prefix") echo isset($table_prefix) ? $table_prefix : ""; elseif (defined($n)) echo constant($n);`;
+var WP_CONFIG_SHELL = `cez_wp_php() {
+  command -v php >/dev/null 2>&1 || return 1
+  cez_v=$(php -d display_errors=0 -d log_errors=0 -r '${WP_CONFIG_PHP}' "$1" "$2" 2>/dev/null) || return 1
+  [ -n "$cez_v" ] && printf '%s\\n' "$cez_v"
+}
+cez_wp_define() {
+  cez_wp_php "$1" "$2" && return 0
   sed -n -e "s/^[[:space:]]*define([[:space:]]*['\\"]$2['\\"][[:space:]]*,[[:space:]]*'\\([^']*\\)'.*/\\1/p" \\
     -e "s/^[[:space:]]*define([[:space:]]*['\\"]$2['\\"][[:space:]]*,[[:space:]]*\\"\\([^\\"]*\\)\\".*/\\1/p" "$1" | head -n 1
 }
 cez_wp_prefix() {
+  cez_wp_php "$1" table_prefix && return 0
   sed -n -e "s/^[[:space:]]*[$]table_prefix[[:space:]]*=[[:space:]]*'\\([^']*\\)'.*/\\1/p" \\
     -e "s/^[[:space:]]*[$]table_prefix[[:space:]]*=[[:space:]]*\\"\\([^\\"]*\\)\\".*/\\1/p" "$1" | head -n 1
 }
@@ -29534,7 +29579,11 @@ for nome in ${variaveis}; do
       localhost:*) v="127.0.0.1:\${v#localhost:}" ;;
     esac
   fi
-  printf '%s=%s\\n' "$chave" "$(printf '%s' "$v" | sed 's/\\$/$$/g')" >> "$tmp"
+  case "$v" in
+    *\\'*) v="\\"$(printf '%s' "$v" | sed -e 's/[\\\\"]/\\\\&/g' -e 's/\\$/$$/g')\\"" ;;
+    *) v="'$v'" ;;
+  esac
+  printf '%s=%s\\n' "$chave" "$v" >> "$tmp"
   echo "ADDED $chave"
 done
 chmod 600 "$tmp"
@@ -30362,7 +30411,7 @@ async function resolvePanelHosts() {
 var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, descoberta lendo as depend\xEAncias do projeto. Precisa ser um valor desta lista, escrito exatamente como nela; outro valor \xE9 recusado. Prefira o framework \xE0 linguagem (nextjs a nodejs, django a python) e use a linguagem s\xF3 quando o projeto n\xE3o usar framework nenhum da lista. Site est\xE1tico, s\xF3 HTML, CSS e JavaScript sem framework, \xE9 html. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.2.29"
+  version: "0.2.31"
 });
 server.registerTool(
   "cloudez_auth_status",
@@ -30599,7 +30648,7 @@ server.registerTool(
   "cloudez_compose_up",
   {
     title: "Subir o container da release ativa",
-    description: "Sobe o container da release ativa com `docker compose up -d` no servidor. Chame S\xD3 em site cuja aplica\xE7\xE3o roda em container, e SEMPRE depois do cloudez_finalize_deploy. Se o Usa os MESMOS arquivos do build (base + docker-compose.cloudez.yml, quando existe), e devolve em `compose.files` quais foram; `compose.override_ignored` avisa que um `*.override.*` do reposit\xF3rio deixou de ser mesclado. Havendo sobreposi\xE7\xE3o, tamb\xE9m LIGA a `shared/` todo bind relativo que sobreviver ao merge \u2014 menos a raiz da release e o `build.context`, que s\xE3o a aplica\xE7\xE3o e n\xE3o dado. \xC9 o que faz o dado escapar da poda de releases; vem em `compose.shared`, e `compose.shared_created` diz o que nasceu neste deploy. cloudez_compose_build j\xE1 rodou, sobe a imagem pronta; se n\xE3o, reconstr\xF3i com `--build` (mais lento, e o site fica em estado misto durante o build). Sem este passo o deploy termina 'succeeded' mas o site responde 502 ou serve a release anterior. Confira o `state` de cada container no retorno: 'restarting'/'exited' \xE9 deploy fracassado com JSON de sucesso. Verifique o site batendo no dom\xEDnio depois.",
+    description: "Sobe o container da release ativa com `docker compose up -d` no servidor. Chame S\xD3 em site cuja aplica\xE7\xE3o roda em container, e SEMPRE depois do cloudez_finalize_deploy. Se o Usa os MESMOS arquivos do build (base + docker-compose.cloudez.yml, quando existe), e devolve em `compose.files` quais foram; `compose.override_ignored` avisa que um `*.override.*` do reposit\xF3rio deixou de ser mesclado. Havendo sobreposi\xE7\xE3o, tamb\xE9m LIGA a `shared/` todo bind relativo que sobreviver ao merge \u2014 menos a raiz da release e o `build.context`, que s\xE3o a aplica\xE7\xE3o e n\xE3o dado. \xC9 o que faz o dado escapar da poda de releases; vem em `compose.shared`, e `compose.shared_created` diz o que nasceu neste deploy. Um diret\xF3rio de `shared/` que existia s\xF3 em parte (antes s\xF3 subdiret\xF3rios eram compartilhados) recebe o que a release anterior tinha a mais, sem sobrescrever nada: vem em `compose.shared_merged`, a anterior fica guardada em `compose.shared_merge_backup`, e arquivos com conte\xFAdo diferente nos dois lados v\xEAm em `compose.shared_merge_conflicts` (fica o do `shared/`). cloudez_compose_build j\xE1 rodou, sobe a imagem pronta; se n\xE3o, reconstr\xF3i com `--build` (mais lento, e o site fica em estado misto durante o build). Sem este passo o deploy termina 'succeeded' mas o site responde 502 ou serve a release anterior. Confira o `state` de cada container no retorno: 'restarting'/'exited' \xE9 deploy fracassado com JSON de sucesso. Verifique o site batendo no dom\xEDnio depois.",
     inputSchema: object({
       deploy_id: string2().describe("deploy_id de uma release j\xE1 finalizada (status succeeded)")
     }),

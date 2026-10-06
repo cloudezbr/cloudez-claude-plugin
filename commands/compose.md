@@ -420,7 +420,9 @@ wp-content
    produção no arquivo de ambiente. Por isso o conteúdo de `wp-content` do
    projeto só seria usado num primeiro deploy sem essa semente. Para o deploy não
    enviar uploads que produção já tem, ponha `wp-content/uploads/` no
-   `.cloudezignore`.
+   `.cloudezignore`. Um site que compartilhava só `uploads`, `plugins` e
+   `themes` não perde nada ao passar para o `wp-content` inteiro: o deploy
+   completa o `shared/wp-content` com o que a release anterior tinha.
 7. **O banco de produção é o que o WordPress já usava**, na instância da
    Cloudez. Não crie outro: registre `--database cloudez` com o `cloudez-setup`.
 
@@ -1156,7 +1158,8 @@ Um `!reset null` seco em `volumes` também apaga o bind de dado — use quando n
 houver nenhum a preservar.
 
 Depois do deploy, `compose.shared` diz o que foi ligado, `compose.shared_created`
-o que nasceu ali e `compose.shared_migrated` o que veio da release anterior. Um
+o que nasceu ali, `compose.shared_migrated` o que veio da release anterior e
+`compose.shared_merged` o que já existia em parte e foi completado. Um
 diretório reaparecendo em `shared_created` num deploy que não é o primeiro
 significa que alguém apagou o de `shared/`.
 
