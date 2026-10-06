@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.29 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.30 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -29414,11 +29414,28 @@ function desconhecido(pullId2) {
 }
 
 // src/wordpress.ts
-var WP_CONFIG_SHELL = `cez_wp_define() {
+var WP_CONFIG_PHP = String.raw`$c = $argv[1]; $n = $argv[2]; $d = dirname($c);
+if (strpos(basename($d), "bkp-") === 0) $d = dirname($d);
+$t = sys_get_temp_dir() . "/cez-wp-" . getmypid(); @mkdir($t, 0700); touch("$t/wp-settings.php");
+define("ABSPATH", "$t/");
+$s = file_get_contents($c);
+$s = preg_replace("/dirname\s*\(\s*__FILE__\s*\)/", var_export($d, true), $s);
+$s = str_replace(["__DIR__", "__FILE__"], [var_export($d, true), var_export("$d/wp-config.php", true)], $s);
+ob_start(); try { eval("?>" . $s); } catch (Throwable $e) {} ob_end_clean();
+@unlink("$t/wp-settings.php"); @rmdir($t);
+if ($n === "table_prefix") echo isset($table_prefix) ? $table_prefix : ""; elseif (defined($n)) echo constant($n);`;
+var WP_CONFIG_SHELL = `cez_wp_php() {
+  command -v php >/dev/null 2>&1 || return 1
+  cez_v=$(php -d display_errors=0 -d log_errors=0 -r '${WP_CONFIG_PHP}' "$1" "$2" 2>/dev/null) || return 1
+  [ -n "$cez_v" ] && printf '%s\\n' "$cez_v"
+}
+cez_wp_define() {
+  cez_wp_php "$1" "$2" && return 0
   sed -n -e "s/^[[:space:]]*define([[:space:]]*['\\"]$2['\\"][[:space:]]*,[[:space:]]*'\\([^']*\\)'.*/\\1/p" \\
     -e "s/^[[:space:]]*define([[:space:]]*['\\"]$2['\\"][[:space:]]*,[[:space:]]*\\"\\([^\\"]*\\)\\".*/\\1/p" "$1" | head -n 1
 }
 cez_wp_prefix() {
+  cez_wp_php "$1" table_prefix && return 0
   sed -n -e "s/^[[:space:]]*[$]table_prefix[[:space:]]*=[[:space:]]*'\\([^']*\\)'.*/\\1/p" \\
     -e "s/^[[:space:]]*[$]table_prefix[[:space:]]*=[[:space:]]*\\"\\([^\\"]*\\)\\".*/\\1/p" "$1" | head -n 1
 }
@@ -29534,7 +29551,11 @@ for nome in ${variaveis}; do
       localhost:*) v="127.0.0.1:\${v#localhost:}" ;;
     esac
   fi
-  printf '%s=%s\\n' "$chave" "$(printf '%s' "$v" | sed 's/\\$/$$/g')" >> "$tmp"
+  case "$v" in
+    *\\'*) v="\\"$(printf '%s' "$v" | sed -e 's/[\\\\"]/\\\\&/g' -e 's/\\$/$$/g')\\"" ;;
+    *) v="'$v'" ;;
+  esac
+  printf '%s=%s\\n' "$chave" "$v" >> "$tmp"
   echo "ADDED $chave"
 done
 chmod 600 "$tmp"
@@ -30362,7 +30383,7 @@ async function resolvePanelHosts() {
 var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, descoberta lendo as depend\xEAncias do projeto. Precisa ser um valor desta lista, escrito exatamente como nela; outro valor \xE9 recusado. Prefira o framework \xE0 linguagem (nextjs a nodejs, django a python) e use a linguagem s\xF3 quando o projeto n\xE3o usar framework nenhum da lista. Site est\xE1tico, s\xF3 HTML, CSS e JavaScript sem framework, \xE9 html. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.2.29"
+  version: "0.2.30"
 });
 server.registerTool(
   "cloudez_auth_status",

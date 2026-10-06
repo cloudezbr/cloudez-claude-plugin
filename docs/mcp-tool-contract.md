@@ -1982,11 +1982,22 @@ WordPress costuma gravar arquivo novo, mas não é garantia. Um
 **O arquivo de ambiente.** Para `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`,
 `TABLE_PREFIX` e os oito salts, grava `WORDPRESS_<nome>=<valor>` no
 `.cloudez.env` (modo 600, escrita atômica, como o `cloudez_set_env`), só quando a
-chave ainda não está lá. O `$` do valor é dobrado, porque o `env_file` do Compose
-lê `$$` como `$` literal. `DB_HOST` `localhost`, com ou sem porta ou socket,
+chave ainda não está lá. O valor vai entre aspas simples, que o `env_file` do
+Compose lê literalmente: sem aspas ele interpolaria `$`, cortaria em ` #` e
+apagaria o espaço do fim. Um valor com `'` vai entre aspas duplas, com `\`, `"`
+e `$` escapados (`$$`). Medido com o Docker Compose 5.3.1. `DB_HOST` `localhost`, com ou sem porta ou socket,
 vira `127.0.0.1`: o container em host mode não tem o socket do MySQL do servidor.
 Os valores vão do `wp-config.php` ao `.cloudez.env` por um script que roda no
 servidor; **nenhum deles aparece no retorno**, que traz só os nomes.
+
+**Como o `wp-config.php` é lido.** O PHP do servidor avalia o arquivo, com o
+`ABSPATH` apontando para um `wp-settings.php` vazio, e imprime a constante. É o
+que cobre o WordPress provisionado pela Cloudez, cujas credenciais vêm de
+constantes de `~/<domain>/etc/php/lib/CloudezSettings.php`, carregado por
+`dirname(__FILE__) . '/../etc/...'`. Num `bkp-*`, o arquivo é avaliado como se
+estivesse no `www`, para esse caminho relativo continuar certo. Sem PHP de linha
+de comando no servidor, um `sed` lê só os `define` com valor literal entre aspas.
+O `cloudez_begin_pull` usa a mesma leitura para medir e para o dump do banco.
 
 **Idempotente.** Repetir não sobrescreve nada: tudo vem em `kept`.
 
