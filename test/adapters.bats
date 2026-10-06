@@ -751,3 +751,120 @@ real_tar() { PATH=/usr/bin:/bin tar "$@"; }
   [ "$status" -ne 0 ]
   [ "$(campo "$output" .error.code)" = "filename_unsupported" ]
 }
+
+# -------------------------------------------------------------------- pull --
+#
+# O transporte no sentido inverso: o cloudez_begin_pull grava os comandos
+# remotos prontos, e o cloudez-pull so os executa. Nos testes de caminho feliz o
+# ssh roda o comando aqui e o tar e o de verdade, porque o que se afirma e o que
+# chega ao disco.
+
+@test "sem argumentos o pull imprime o uso e sai 2" {
+  run cloudez-pull
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"uso: cloudez-pull"* ]]
+  [[ "$output" == *"--with-uploads"* ]]
+}
+
+@test "pull com pull_id desconhecido: pull_not_found" {
+  run cloudez-pull pull_0000abcd .
+  [ "$status" -eq 1 ]
+  [ "$(campo "$output" .error.code)" = "pull_not_found" ]
+}
+
+# O id vira nome de arquivo no diretorio de estado.
+@test "pull_id fora do formato nao vira caminho" {
+  run cloudez-pull ../../etc/passwd .
+  [ "$status" -eq 1 ]
+  [ "$(campo "$output" .error.code)" = "pull_not_found" ]
+}
+
+# O tar sobrescreveria o codigo do usuario sem perguntar. Recusa sem apagar nada,
+# e sem conectar.
+@test "pull recusa diretorio que ja tem codigo" {
+  p=$(pull_state pull_0000abcd "tar czf - ." "tar czf - .")
+  printf '<?php' > index.php
+  run cloudez-pull "$p" .
+  [ "$status" -eq 1 ]
+  [ "$(campo "$output" .error.code)" = "directory_not_empty" ]
+  [[ "$(campo "$output" .error.message)" == *"index.php"* ]]
+  [ -f index.php ]
+  ! grep -q '^ssh' "$MOCK_LOG"
+}
+
+@test "pull baixa arquivos e dump, e poe o dump no .gitignore" {
+  ssh_que_executa
+  mkdir -p "$TEST_TMP/srv/wp-content/uploads"
+  printf '<?php' > "$TEST_TMP/srv/index.php"
+  printf 'img' > "$TEST_TMP/srv/wp-content/uploads/a.jpg"
+  printf 'do-servidor\n' > "$TEST_TMP/srv/.gitignore"
+  p=$(pull_state pull_0000abcd \
+    "cd '$TEST_TMP/srv' && tar czf - --exclude=./wp-content/uploads ." \
+    "cd '$TEST_TMP/srv' && tar czf - ." \
+    "printf 'CREATE TABLE x;' | gzip -c")
+  rm .gitignore
+
+  run cloudez-pull "$p" .
+  [ "$status" -eq 0 ]
+  [ "$(campo "$output" .kind)" = "wordpress" ]
+  [ "$(campo "$output" .uploads_included)" = "false" ]
+  [ "$(campo "$output" .database_dump)" = ".cloudez/db/dump.sql.gz" ]
+  [ -f index.php ]
+  [ ! -e wp-content/uploads/a.jpg ]
+  [ "$(gzip -dc .cloudez/db/dump.sql.gz)" = "CREATE TABLE x;" ]
+  grep -qx '\.cloudez/db/' .gitignore
+  grep -qx 'do-servidor' .gitignore
+}
+
+@test "pull --with-uploads usa o comando que traz os uploads" {
+  ssh_que_executa
+  mkdir -p "$TEST_TMP/srv/wp-content/uploads"
+  printf 'img' > "$TEST_TMP/srv/wp-content/uploads/a.jpg"
+  p=$(pull_state pull_0000abcd \
+    "cd '$TEST_TMP/srv' && tar czf - --exclude=./wp-content/uploads ." \
+    "cd '$TEST_TMP/srv' && tar czf - .")
+
+  run cloudez-pull "$p" . --with-uploads
+  [ "$status" -eq 0 ]
+  [ "$(campo "$output" .uploads_included)" = "true" ]
+  [ -f wp-content/uploads/a.jpg ]
+  [ "$(campo "$output" .database_dump)" = "null" ]
+}
+
+# O site pode trazer um .gitignore que o tar poe por cima do projeto. A linha que
+# o setup gravou precisa sobreviver, e nenhuma pode duplicar ao repetir a garantia.
+@test "o .gitignore do projeto sobrevive ao do site" {
+  ssh_que_executa
+  mkdir -p "$TEST_TMP/srv"
+  printf 'node_modules\n' > "$TEST_TMP/srv/.gitignore"
+  p=$(pull_state pull_0000abcd "cd '$TEST_TMP/srv' && tar czf - ." "cd '$TEST_TMP/srv' && tar czf - .")
+
+  run cloudez-pull "$p" .
+  [ "$status" -eq 0 ]
+  grep -qx 'node_modules' .gitignore
+  [ "$(grep -c '^\.cloudez/$' .gitignore)" -eq 1 ]
+  ! grep -q '^\.cloudez/db/$' .gitignore
+}
+
+# Um gzip pela metade seria restaurado como banco incompleto, sem erro nenhum.
+@test "dump que falha nao deixa arquivo parcial" {
+  ssh_que_executa
+  mkdir -p "$TEST_TMP/srv" && printf 'x' > "$TEST_TMP/srv/index.php"
+  p=$(pull_state pull_0000abcd "cd '$TEST_TMP/srv' && tar czf - ." "cd '$TEST_TMP/srv' && tar czf - ." \
+    "printf 'parcial'; echo 'Lost connection' >&2; exit 3")
+
+  run cloudez-pull "$p" .
+  [ "$status" -eq 1 ]
+  [ "$(campo "$output" .error.code)" = "database_dump_failed" ]
+  [[ "$(campo "$output" .error.logs)" == *"Lost connection"* ]]
+  [ ! -e .cloudez/db/dump.sql.gz ]
+  [ -f index.php ]
+}
+
+@test "pull propaga falha do ssh nos arquivos" {
+  p=$(pull_state pull_0000abcd "tar czf - ." "tar czf - .")
+  MOCK_SSH_EXIT=255 MOCK_SSH_STDERR="Permission denied (publickey)" run cloudez-pull "$p" .
+  [ "$status" -eq 1 ]
+  [ "$(campo "$output" .error.code)" = "transfer_failed" ]
+  [[ "$(campo "$output" .error.logs)" == *"Permission denied"* ]]
+}

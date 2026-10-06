@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cloudez-mcp 0.2.28 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.29 — gerado por 'npm run bundle'. Nao edite.
 import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -27307,6 +27307,16 @@ function normalizeHost(entrada) {
   const host = bruto.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#]/)[0].replace(/\.$/, "").toLowerCase();
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(host) ? host : void 0;
 }
+var DOMINIO_OK = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;
+function dominioSeguro(domain) {
+  const dominio = String(domain ?? "").trim().toLowerCase();
+  if (!DOMINIO_OK.test(dominio)) {
+    throw new ToolError("invalid_argument", `'${domain}' n\xE3o \xE9 um dom\xEDnio v\xE1lido.`, {
+      hint: "Passe o FQDN do site, como est\xE1 no .cloudez.yaml."
+    });
+  }
+  return dominio;
+}
 
 // src/frameworks.ts
 var FRAMEWORKS = [
@@ -28255,6 +28265,15 @@ function sshRun(target, command) {
     child.on("close", (code) => resolve({ code: code ?? -1, stdout, stderr }));
   });
 }
+function matchLine(out, tag) {
+  for (const line of out.split("\n")) {
+    if (line.startsWith(`${tag} `)) return line.slice(tag.length + 1).trim();
+  }
+  return "";
+}
+function matchLines(out, tag) {
+  return out.split("\n").filter((l) => l.startsWith(`${tag} `)).map((l) => l.slice(tag.length + 1).trim());
+}
 
 // src/deploy-state.ts
 import { createHash as createHash2 } from "node:crypto";
@@ -28450,12 +28469,6 @@ fi`;
   if (manifesto) state.manifest = manifesto;
   return saveState(state);
 }
-function matchLine(out, tag) {
-  for (const line of out.split("\n")) {
-    if (line.startsWith(`${tag} `)) return line.slice(tag.length + 1).trim();
-  }
-  return "";
-}
 function resolveProject(state) {
   const domain = state.domain || state.root.split("/")[0];
   if (!domain) {
@@ -28601,9 +28614,6 @@ case "$cez_rel" in
     ;;
 esac
 `;
-}
-function matchLines(out, tag) {
-  return out.split("\n").filter((l) => l.startsWith(`${tag} `)).map((l) => l.slice(tag.length + 1).trim());
 }
 function planSharedDirs(stdout, releaseId) {
   const releaseDir = matchLine(stdout, "RELEASE_DIR");
@@ -29306,19 +29316,13 @@ async function checkDns(domain, opts = {}) {
 }
 
 // src/convert.ts
-var DOMINIO_OK = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;
 async function convertSite(domain, userConfirmed) {
   if (userConfirmed !== true) {
     throw new ToolError("confirmation_required", "A convers\xE3o n\xE3o foi feita: falta o aceite do usu\xE1rio.", {
       hint: "Pergunte ao usu\xE1rio, com AskUserQuestion, se ele quer converter o site para o tipo Claude, avisando que pode haver breves per\xEDodos de downtime. S\xF3 chame de novo, com user_confirmed: true, se ele aceitar."
     });
   }
-  const dominio = String(domain ?? "").trim().toLowerCase();
-  if (!DOMINIO_OK.test(dominio)) {
-    throw new ToolError("invalid_argument", `'${domain}' n\xE3o \xE9 um dom\xEDnio v\xE1lido.`, {
-      hint: "Passe o FQDN do site, como est\xE1 no .cloudez.yaml."
-    });
-  }
+  const dominio = dominioSeguro(domain);
   let site = await siteExato(dominio);
   const resultado = { domain: site.domain, converted: false, moved: 0 };
   if (!isAppStack(site.stack)) {
@@ -29388,15 +29392,291 @@ if [ "$moved" -gt 0 ]; then echo "BACKUP $www/$dest $moved"; else echo NOTHING; 
   return m ? { path: m[1], moved: Number(m[2]) } : { moved: 0 };
 }
 
+// src/pull-state.ts
+import { createHash as createHash4 } from "node:crypto";
+import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { join as join3 } from "node:path";
+var PULL_ID = /^pull_[0-9a-f]{8}$/;
+function pullId(domain, source) {
+  return `pull_${createHash4("sha1").update(`${domain}
+${source}`).digest("hex").slice(0, 8)}`;
+}
+function savePullState(state) {
+  if (!PULL_ID.test(state.pull_id)) throw desconhecido(state.pull_id);
+  mkdirSync2(stateDir(), { recursive: true });
+  writeFileSync2(join3(stateDir(), `${state.pull_id}.json`), JSON.stringify(state, null, 2));
+  return state;
+}
+function desconhecido(pullId2) {
+  return new ToolError("pull_not_found", `pull_id '${pullId2}' desconhecido.`, {
+    hint: "Chame cloudez_begin_pull e use o pull_id que ele devolver."
+  });
+}
+
+// src/wordpress.ts
+var WP_CONFIG_SHELL = `cez_wp_define() {
+  sed -n -e "s/^[[:space:]]*define([[:space:]]*['\\"]$2['\\"][[:space:]]*,[[:space:]]*'\\([^']*\\)'.*/\\1/p" \\
+    -e "s/^[[:space:]]*define([[:space:]]*['\\"]$2['\\"][[:space:]]*,[[:space:]]*\\"\\([^\\"]*\\)\\".*/\\1/p" "$1" | head -n 1
+}
+cez_wp_prefix() {
+  sed -n -e "s/^[[:space:]]*[$]table_prefix[[:space:]]*=[[:space:]]*'\\([^']*\\)'.*/\\1/p" \\
+    -e "s/^[[:space:]]*[$]table_prefix[[:space:]]*=[[:space:]]*\\"\\([^\\"]*\\)\\".*/\\1/p" "$1" | head -n 1
+}
+cez_wp_mysql() {
+  cez_cfg=$1; cez_prog=$2; shift 2
+  cez_host=$(cez_wp_define "$cez_cfg" DB_HOST)
+  case "$cez_host" in
+    "") cez_host=localhost ;;
+    *:/*) set -- -S "\${cez_host#*:}" "$@"; cez_host=\${cez_host%%:*} ;;
+    *:*) set -- -P "\${cez_host#*:}" "$@"; cez_host=\${cez_host%%:*} ;;
+  esac
+  MYSQL_PWD=$(cez_wp_define "$cez_cfg" DB_PASSWORD) "$cez_prog" -h "$cez_host" \\
+    -u "$(cez_wp_define "$cez_cfg" DB_USER)" "$@" "$(cez_wp_define "$cez_cfg" DB_NAME)"
+}
+`;
+var CHAVES_WP = [
+  "DB_NAME",
+  "DB_USER",
+  "DB_PASSWORD",
+  "DB_HOST",
+  "TABLE_PREFIX",
+  "AUTH_KEY",
+  "SECURE_AUTH_KEY",
+  "LOGGED_IN_KEY",
+  "NONCE_KEY",
+  "AUTH_SALT",
+  "SECURE_AUTH_SALT",
+  "LOGGED_IN_SALT",
+  "NONCE_SALT"
+];
+async function prepareWordpress(domain) {
+  const dominio = dominioSeguro(domain);
+  const found = await getSite(dominio);
+  if (found.match !== "exact") {
+    throw new ToolError("site_not_found", `Nenhum site com o dom\xEDnio exato '${dominio}' nesta conta.`, {
+      hint: "Confirme o dom\xEDnio no .cloudez.yaml com cloudez_get_site."
+    });
+  }
+  const site = found.site;
+  if (site.stack !== APP_STACK) {
+    throw new ToolError("site_not_converted", "O site ainda n\xE3o \xE9 do tipo Claude.", {
+      hint: "Chame cloudez_convert_site antes, com o aceite do usu\xE1rio, e s\xF3 depois esta tool."
+    });
+  }
+  if (!site.ssh) {
+    throw new ToolError("missing_ssh_target", "O destino ssh do site n\xE3o p\xF4de ser determinado.", {
+      hint: site.ssh_unavailable ?? "cloudez_get_site n\xE3o devolveu o bloco ssh deste site."
+    });
+  }
+  const res = await sshRun(site.ssh, scriptPreparo(dominio));
+  if (res.code !== 0) {
+    throw new ToolError("ssh_failed", "N\xE3o foi poss\xEDvel preparar o WordPress no servidor.", {
+      retryable: true,
+      hint: "Chamar de novo \xE9 seguro: o que j\xE1 foi copiado ou gravado \xE9 mantido. " + ((res.stderr || "").slice(0, 400) || `O ssh saiu com c\xF3digo ${res.code}.`)
+    });
+  }
+  const source = matchLine(res.stdout, "SOURCE");
+  if (!source) {
+    throw new ToolError("source_not_found", "Nenhum wp-config.php no servidor, nem no www nem nos backups bkp-*.", {
+      hint: "Sem ele n\xE3o h\xE1 credencial a levar para o arquivo de ambiente. Grave as vari\xE1veis WORDPRESS_* com cloudez_set_env, perguntando ao usu\xE1rio os dados do banco."
+    });
+  }
+  const wpContent = matchLine(res.stdout, "WP_CONTENT");
+  return {
+    domain: dominio,
+    source,
+    wp_content: wpContent === "seeded" || wpContent === "existing" ? wpContent : "absent",
+    env_file: matchLine(res.stdout, "ENV_FILE"),
+    added: matchLines(res.stdout, "ADDED"),
+    kept: matchLines(res.stdout, "KEPT"),
+    missing: matchLines(res.stdout, "MISSING")
+  };
+}
+function scriptPreparo(dominio) {
+  const variaveis = CHAVES_WP.join(" ");
+  return `set -e
+umask 077
+` + WP_CONFIG_SHELL + `www="$HOME/${dominio}/www"
+shared="$www/${APP_SUBDIR}/shared"
+src=""
+for d in "$www"/bkp-*; do
+  if [ -f "$d/wp-config.php" ]; then src="$d"; fi
+done
+if [ -z "$src" ] && [ -f "$www/wp-config.php" ]; then src="$www"; fi
+if [ -z "$src" ]; then echo NO_SOURCE; exit 0; fi
+echo "SOURCE $src"
+cfg="$src/wp-config.php"
+mkdir -p "$shared"
+if [ -d "$shared/wp-content" ]; then
+  echo "WP_CONTENT existing"
+elif [ -d "$src/wp-content" ]; then
+  rm -rf "$shared/wp-content.tmp"
+  if ! cp -al "$src/wp-content" "$shared/wp-content.tmp" 2>/dev/null; then
+    rm -rf "$shared/wp-content.tmp"
+    cp -a "$src/wp-content" "$shared/wp-content.tmp"
+  fi
+  mv "$shared/wp-content.tmp" "$shared/wp-content"
+  echo "WP_CONTENT seeded"
+else
+  echo "WP_CONTENT absent"
+fi
+env="$shared/${CLOUDEZ_ENV_FILE}"
+tmp="$env.tmp"
+if [ -f "$env" ]; then cat "$env" > "$tmp"; else echo "# Gerado pelo plugin da Cloudez. O deploy liga este arquivo dentro da release." > "$tmp"; fi
+for nome in ${variaveis}; do
+  chave="WORDPRESS_$nome"
+  if grep -q "^$chave=" "$tmp"; then echo "KEPT $chave"; continue; fi
+  if [ "$nome" = TABLE_PREFIX ]; then v=$(cez_wp_prefix "$cfg"); else v=$(cez_wp_define "$cfg" "$nome"); fi
+  if [ -z "$v" ]; then echo "MISSING $chave"; continue; fi
+  if [ "$nome" = DB_HOST ]; then
+    case "$v" in
+      localhost|localhost:/*) v=127.0.0.1 ;;
+      localhost:*) v="127.0.0.1:\${v#localhost:}" ;;
+    esac
+  fi
+  printf '%s=%s\\n' "$chave" "$(printf '%s' "$v" | sed 's/\\$/$$/g')" >> "$tmp"
+  echo "ADDED $chave"
+done
+chmod 600 "$tmp"
+mv "$tmp" "$env"
+echo "ENV_FILE $env"
+`;
+}
+
+// src/pull.ts
+var SEMPRE_FORA = [`./${APP_SUBDIR}`, "./bkp-*", "./.git", "./wp-content/cache", "./wp-content/litespeed"];
+var UPLOADS = "./wp-content/uploads";
+async function beginPull(domain) {
+  const dominio = dominioSeguro(domain);
+  const ssh = await resolveSshTarget(dominio);
+  const res = await sshRun(ssh, scriptInspecao(dominio));
+  if (res.code !== 0) {
+    throw new ToolError("ssh_failed", "N\xE3o foi poss\xEDvel inspecionar o site no servidor.", {
+      retryable: true,
+      hint: (res.stderr || "").slice(0, 400) || `O ssh saiu com c\xF3digo ${res.code}.`
+    });
+  }
+  const source = matchLine(res.stdout, "SOURCE");
+  if (!source) {
+    throw new ToolError("source_not_found", "N\xE3o h\xE1 arquivos do site no servidor para baixar.", {
+      hint: "O www est\xE1 vazio e n\xE3o h\xE1 backup bkp-* de uma convers\xE3o anterior. Siga sem o download."
+    });
+  }
+  if (!fonteSegura(source, dominio)) {
+    throw new ToolError("remote_path_unsafe", `O caminho '${source}' n\xE3o pode ser posto num comando remoto.`, {
+      hint: "Nada foi baixado. Isto \xE9 uma limita\xE7\xE3o do servidor MCP; avise o suporte da Cloudez."
+    });
+  }
+  const kind = matchLine(res.stdout, "KIND") === "wordpress" ? "wordpress" : "html";
+  const dump = matchLine(res.stdout, "DUMP_TOOL");
+  const state = {
+    pull_id: pullId(dominio, source),
+    domain: dominio,
+    kind,
+    source,
+    ssh,
+    commands: {
+      files: comandoArquivos(source, [...SEMPRE_FORA, UPLOADS]),
+      files_with_uploads: comandoArquivos(source, SEMPRE_FORA),
+      ...kind === "wordpress" && dump ? { database: comandoBanco(source) } : {}
+    }
+  };
+  savePullState(state);
+  const total = kb(matchLine(res.stdout, "TOTAL_KB"));
+  const uploads = kb(matchLine(res.stdout, "UPLOADS_KB"));
+  const banco = matchLine(res.stdout, "DB_BYTES");
+  return {
+    pull_id: state.pull_id,
+    kind,
+    ...total !== void 0 ? { total_bytes: total } : {},
+    ...uploads !== void 0 ? { uploads_bytes: uploads } : {},
+    .../^\d+$/.test(banco) ? { database_bytes: Number(banco) } : {},
+    ...kind === "wordpress" && !dump ? { database_unavailable: "O servidor n\xE3o tem mysqldump nem mariadb-dump no PATH do usu\xE1rio do site." } : {},
+    excluded: [...SEMPRE_FORA, UPLOADS].map((p) => p.slice(2))
+  };
+}
+function kb(valor) {
+  return /^\d+$/.test(valor) ? Number(valor) * 1024 : void 0;
+}
+function fonteSegura(source, dominio) {
+  const dom = dominio.replace(/\./g, "\\.");
+  return !source.includes("..") && new RegExp(`^/[A-Za-z0-9._/-]+/${dom}/www(/bkp-[A-Za-z0-9_-]+)?$`).test(source);
+}
+function comandoArquivos(source, fora) {
+  const excludes = fora.map((p) => `--exclude='${p}'`).join(" ");
+  return `cd '${source}' || exit 1
+tar czf - ${excludes} .
+r=$?
+[ "$r" -le 1 ] || exit "$r"
+`;
+}
+function comandoBanco(source) {
+  return WP_CONFIG_SHELL + `cfg='${source}/wp-config.php'
+dump=$(command -v mysqldump || command -v mariadb-dump) || { echo "mysqldump nem mariadb-dump no servidor." >&2; exit 1; }
+st=$(mktemp) || exit 1
+{ cez_wp_mysql "$cfg" "$dump" --single-transaction --quick --no-tablespaces || echo falhou > "$st"; } | gzip -c
+gz=$?
+falhou=$(cat "$st")
+rm -f "$st"
+[ "$gz" -eq 0 ] && [ -z "$falhou" ]
+`;
+}
+function scriptInspecao(dominio) {
+  return WP_CONFIG_SHELL + `www="$HOME/${dominio}/www"
+[ -d "$www" ] || { echo NO_WWW; exit 0; }
+cd "$www"
+src=""
+for f in * .[!.]* ..?*; do
+  if [ ! -e "$f" ] && [ ! -L "$f" ]; then continue; fi
+  case "$f" in ${APP_SUBDIR}|bkp-*) continue ;; esac
+  src="$www"; break
+done
+if [ -z "$src" ]; then
+  for d in "$www"/bkp-*; do
+    if [ -d "$d" ]; then src="$d"; fi
+  done
+fi
+[ -n "$src" ] || { echo NO_SOURCE; exit 0; }
+echo "SOURCE $src"
+cd "$src"
+kind=html
+if [ -f wp-config.php ] && [ -d wp-includes ]; then kind=wordpress; fi
+echo "KIND $kind"
+if command -v du >/dev/null 2>&1; then
+  set --
+  for f in * .[!.]* ..?*; do
+    if [ ! -e "$f" ] && [ ! -L "$f" ]; then continue; fi
+    case "$f" in ${APP_SUBDIR}|bkp-*) continue ;; esac
+    set -- "$@" "$f"
+  done
+  total=0
+  if [ $# -gt 0 ]; then total=$(du -sk -- "$@" 2>/dev/null | awk '{s+=$1} END {print s+0}'); fi
+  for d in wp-content/cache wp-content/litespeed; do
+    if [ -d "$d" ]; then total=$((total - $(du -sk -- "$d" 2>/dev/null | awk '{print $1+0}'))); fi
+  done
+  echo "TOTAL_KB $total"
+  if [ -d wp-content/uploads ]; then echo "UPLOADS_KB $(du -sk wp-content/uploads 2>/dev/null | awk '{print $1+0}')"; fi
+fi
+if [ "$kind" = wordpress ]; then
+  if command -v mysqldump >/dev/null 2>&1 || command -v mariadb-dump >/dev/null 2>&1; then echo "DUMP_TOOL yes"; fi
+  cli=$(command -v mysql || command -v mariadb || true)
+  if [ -n "$cli" ]; then
+    b=$(cez_wp_mysql "$src/wp-config.php" "$cli" -N -B -e "SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = DATABASE()" 2>/dev/null || true)
+    case "$b" in ''|*[!0-9]*) ;; *) echo "DB_BYTES $b" ;; esac
+  fi
+fi
+`;
+}
+
 // src/login-hint.ts
 import { accessSync, constants, existsSync } from "node:fs";
-import { delimiter, dirname as dirname2, join as join3 } from "node:path";
+import { delimiter, dirname as dirname2, join as join4 } from "node:path";
 import { fileURLToPath } from "node:url";
 function onPath(name) {
   for (const dir of (process.env.PATH || "").split(delimiter)) {
     if (!dir) continue;
     try {
-      accessSync(join3(dir, name), constants.X_OK);
+      accessSync(join4(dir, name), constants.X_OK);
       return true;
     } catch {
     }
@@ -29415,7 +29695,7 @@ function pluginBin() {
   ];
   for (const root of roots) {
     if (!root) continue;
-    const candidate = join3(root, "bin", "cloudez-login");
+    const candidate = join4(root, "bin", "cloudez-login");
     if (existsSync(candidate)) return candidate;
   }
   return null;
@@ -29579,7 +29859,7 @@ ${publicKey.trim()}`;
 }
 
 // src/health.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 var EXCERPT_LIMIT = 500;
 var dorme = (ms) => new Promise((r) => setTimeout(r, ms));
 async function tentativa(url2, timeout) {
@@ -29614,7 +29894,7 @@ async function healthCheck(domain, opts = {}) {
           status_code: status,
           latency_ms: Date.now() - inicio,
           attempts: usadas,
-          body_sha256: createHash4("sha256").update(corpo).digest("hex"),
+          body_sha256: createHash5("sha256").update(corpo).digest("hex"),
           body_excerpt: corpo.slice(0, EXCERPT_LIMIT)
         };
         break;
@@ -30082,7 +30362,7 @@ async function resolvePanelHosts() {
 var FRAMEWORK_DESCRIPTION = `Tecnologia da aplica\xE7\xE3o, descoberta lendo as depend\xEAncias do projeto. Precisa ser um valor desta lista, escrito exatamente como nela; outro valor \xE9 recusado. Prefira o framework \xE0 linguagem (nextjs a nodejs, django a python) e use a linguagem s\xF3 quando o projeto n\xE3o usar framework nenhum da lista. Site est\xE1tico, s\xF3 HTML, CSS e JavaScript sem framework, \xE9 html. Lista: ${FRAMEWORKS.join(", ")}.`;
 var server = new McpServer({
   name: "Cloudez MCP",
-  version: "0.2.28"
+  version: "0.2.29"
 });
 server.registerTool(
   "cloudez_auth_status",
@@ -30723,6 +31003,42 @@ server.registerTool(
   async ({ domain, user_confirmed }) => {
     try {
       return okResult({ ...await convertSite(domain, user_confirmed === true) });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+server.registerTool(
+  "cloudez_begin_pull",
+  {
+    title: "Preparar o download de um site da Cloudez para esta m\xE1quina",
+    description: "Inspeciona por ssh um site WordPress ou html que j\xE1 existe na Cloudez e prepara o download dele para o diret\xF3rio do projeto, que \xE9 feito em seguida pelo adaptador `cloudez-pull <pull_id> <diret\xF3rio> [--with-uploads]`. Chame no /cloudez:convert, ANTES de cloudez_convert_site, quando o diret\xF3rio do projeto n\xE3o tem o c\xF3digo do site. A fonte \xE9 ~/<domain>/www, ou o backup bkp-* mais recente quando o www s\xF3 tem o deploy do plugin. Devolve `kind` (wordpress ou html) e os tamanhos medidos no servidor: `total_bytes` (tudo o que viria com os uploads, sem compress\xE3o), `uploads_bytes` (wp-content/uploads) e `database_bytes` (dados e \xEDndices do banco); cada um sai ausente quando a medi\xE7\xE3o falhou. Use os tamanhos para perguntar ao usu\xE1rio, com AskUserQuestion, se os uploads v\xEAm junto, dizendo quanto ser\xE1 baixado e quanto disco ocupa na m\xE1quina. No WordPress, o dump do banco vem junto, salvo quando `database_unavailable` diz por qu\xEA. Nada \xE9 alterado no servidor.",
+    inputSchema: object({
+      domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml (ex.: meusite.com.br)")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+  },
+  async ({ domain }) => {
+    try {
+      return okResult({ ...await beginPull(domain) });
+    } catch (err) {
+      return errorResult(err);
+    }
+  }
+);
+server.registerTool(
+  "cloudez_prepare_wordpress",
+  {
+    title: "Levar o wp-content e as credenciais do WordPress para o shared/ do site",
+    description: "Num WordPress convertido para o tipo claude, copia o wp-content do backup bkp-* mais recente para <root>/shared/wp-content (por hardlink quando o servidor deixa, sen\xE3o por c\xF3pia) e grava em <root>/shared/.cloudez.env as vari\xE1veis WORDPRESS_DB_NAME, WORDPRESS_DB_USER, WORDPRESS_DB_PASSWORD, WORDPRESS_DB_HOST, WORDPRESS_TABLE_PREFIX e os oito salts, lidas do wp-config.php do backup. Chame DEPOIS de cloudez_convert_site e ANTES do deploy, quando o Compose do projeto \xE9 o do WordPress do /cloudez:compose. Os valores v\xE3o do arquivo ao arquivo dentro do servidor e nunca aparecem aqui: o retorno traz s\xF3 os nomes (`added`, `kept`, `missing`). N\xE3o sobrescreve um wp-content que j\xE1 existe em shared/ nem uma chave que j\xE1 est\xE1 no arquivo de ambiente. DB_HOST localhost vira 127.0.0.1, porque o container n\xE3o alcan\xE7a o socket do MySQL. Falha com site_not_converted se o site ainda n\xE3o \xE9 claude.",
+    inputSchema: object({
+      domain: string2().describe("FQDN do site, como est\xE1 no .cloudez.yaml (ex.: meusite.com.br)")
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+  },
+  async ({ domain }) => {
+    try {
+      return okResult({ ...await prepareWordpress(domain) });
     } catch (err) {
       return errorResult(err);
     }

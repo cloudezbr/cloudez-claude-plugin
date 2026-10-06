@@ -1,0 +1,139 @@
+#!/usr/bin/env node
+/**
+ * Uso: cloudez-pull <pull_id> <diretorio> [--with-uploads]
+ *
+ * Baixa para o diretório do projeto o site que o cloudez_begin_pull
+ * inspecionou: os arquivos e, num WordPress, o dump do banco em
+ * `.cloudez/db/dump.sql.gz`. Os comandos remotos vêm prontos no estado; aqui
+ * só se move bytes, como no cloudez-sync.
+ *
+ * O par deste arquivo é o `.cmd` ao lado, para quem chama pelo cmd ou
+ * PowerShell, onde o shebang não vale nada.
+ */
+
+import { appendFileSync, closeSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs"
+import { join, resolve } from "node:path"
+
+import { loadPullState } from "../mcp/cloudez-state.mjs"
+
+import { die, ok } from "./_out.mjs"
+import { baixar, receber } from "./_transfer.mjs"
+
+// O que o /cloudez:setup, o git e o Claude Code deixam num projeto que ainda não tem código.
+const PERMITIDOS = new Set([".cloudez.yaml", ".cloudez.yml", ".git", ".gitignore", ".claude", ".DS_Store"])
+
+const DUMP = join(".cloudez", "db", "dump.sql.gz")
+
+const args = process.argv.slice(2)
+const comUploads = args.includes("--with-uploads")
+const posicionais = args.filter((a) => a !== "--with-uploads")
+
+if (posicionais.length !== 2 || posicionais.some((a) => a.startsWith("--"))) {
+  process.stderr.write("uso: cloudez-pull <pull_id> <diretorio> [--with-uploads]\n")
+  process.exit(2)
+}
+
+const [pullId, dir] = posicionais
+
+let estado
+try {
+  estado = loadPullState(pullId)
+} catch (e) {
+  die("pull_not_found", e?.body?.error?.message ?? `pull_id '${pullId}' desconhecido. Chame cloudez_begin_pull primeiro.`)
+}
+
+conferirDiretorio(dir)
+
+/**
+ * O site pode trazer um .gitignore próprio, que o tar extrai por cima do
+ * projeto. As linhas de antes voltam depois, para não sumir o que o setup pôs.
+ */
+const gitignoreAntes = lerGitignore(dir)
+
+const arquivos = await receber(
+  estado.ssh,
+  comUploads ? estado.commands.files_with_uploads : estado.commands.files,
+  dir,
+)
+if (arquivos.erro) {
+  die("transfer_failed", `Falha ao baixar os arquivos de ${estado.ssh.host}.`, {
+    logs: arquivos.logs,
+    hint: `O que chegou até a falha ficou em '${dir}'. Para repetir, o diretório precisa voltar a ter só o que tinha antes.`,
+  })
+}
+
+const gitignore = garantirGitignore(dir, gitignoreAntes)
+
+let dump = null
+if (estado.commands.database) {
+  const destino = join(dir, DUMP)
+  mkdirSync(join(dir, ".cloudez", "db"), { recursive: true })
+  const fd = openSync(destino, "w", 0o600)
+  let r
+  try {
+    r = await baixar(estado.ssh, estado.commands.database, fd)
+  } finally {
+    closeSync(fd)
+  }
+  if (r.erro) {
+    // Um gzip pela metade seria restaurado pelo MariaDB como um banco incompleto, sem erro.
+    rmSync(destino, { force: true })
+    die("database_dump_failed", `Os arquivos foram baixados, mas o dump do banco falhou em ${estado.ssh.host}.`, {
+      logs: r.logs,
+    })
+  }
+  dump = DUMP.split("\\").join("/")
+}
+
+ok({
+  pull_id: estado.pull_id,
+  kind: estado.kind,
+  source: estado.source,
+  directory: resolve(dir),
+  uploads_included: comUploads,
+  ...(dump ? { database_dump: dump } : {}),
+  gitignore,
+})
+
+// Cria o diretório se faltar, e recusa um que já tenha código: o tar sobrescreveria sem perguntar.
+function conferirDiretorio(d) {
+  let info = null
+  try {
+    info = statSync(d)
+  } catch {
+    info = null
+  }
+  if (info && !info.isDirectory()) die("directory_not_empty", `'${d}' existe e não é um diretório.`)
+  if (!info) mkdirSync(d, { recursive: true })
+
+  const sobra = readdirSync(d).filter((n) => !PERMITIDOS.has(n))
+  if (sobra.length > 0) {
+    const amostra = sobra.slice(0, 5).join(", ") + (sobra.length > 5 ? ", ..." : "")
+    die("directory_not_empty", `O diretório '${d}' já tem conteúdo (${amostra}). Nada foi baixado.`, {
+      hint: "Escolha um diretório vazio, ou um que só tenha o .cloudez.yaml, o .git e o .gitignore.",
+    })
+  }
+}
+
+function lerGitignore(d) {
+  try {
+    return readFileSync(join(d, ".gitignore"), "utf8")
+  } catch {
+    return ""
+  }
+}
+
+/**
+ * O sync respeita o .gitignore, e é isso que mantém o dump fora do deploy.
+ * Devolve "updated" ou "already".
+ */
+function garantirGitignore(d, antes) {
+  const arquivo = join(d, ".gitignore")
+  const atual = lerGitignore(d)
+  const presentes = new Set(atual.split(/\r?\n/))
+  const faltando = antes.split(/\r?\n/).filter((l) => l.trim() !== "" && !presentes.has(l))
+  if (!/^\/?\.cloudez(\/db)?\/?$/m.test(atual + "\n" + faltando.join("\n"))) faltando.push(".cloudez/db/")
+  if (faltando.length === 0) return "already"
+  appendFileSync(arquivo, (atual && !atual.endsWith("\n") ? "\n" : "") + faltando.join("\n") + "\n")
+  return "updated"
+}

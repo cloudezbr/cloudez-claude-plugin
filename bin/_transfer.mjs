@@ -1,5 +1,6 @@
 /**
- * Transporte: tar local em stream para tar remoto, através de ssh.
+ * Transporte: tar local em stream para tar remoto, através de ssh, e o
+ * inverso, do servidor para a máquina, para o cloudez-pull.
  *
  * Não é rsync: rsync não existe no Windows, o diretório de release está
  * sempre vazio (nada para o delta transfer comparar), e um stream único é
@@ -47,14 +48,7 @@ export function transferir(dep, localDir) {
    */
   const tarArgs = ["-czf", "-", "-C", localDir, "-T", "-"]
 
-  const remoto = `tar xzf - -C ${aspasParaShellRemoto(dep.ssh.path)}`
-  const sshArgs = [
-    "-o", "BatchMode=yes",
-    "-o", "StrictHostKeyChecking=accept-new",
-    "-p", String(dep.ssh.port),
-    `${dep.ssh.user}@${dep.ssh.host}`,
-    remoto,
-  ]
+  const sshArgs = argsSsh(dep.ssh, `tar xzf - -C ${aspasParaShellRemoto(dep.ssh.path)}`)
 
   /**
    * COPYFILE_DISABLE=1 impede o tar do macOS de empacotar os metadados
@@ -102,6 +96,56 @@ export function transferir(dep, localDir) {
     const resumo = ignore.sources.length > 0 ? ` (${ignore.sources.join("+")}: ${ignore.pruned} podados)` : ""
     return { stats: `tar+ssh -> ${dep.ssh.host}:${dep.ssh.path}${resumo}`, logs, erro: null }
   })
+}
+
+/**
+ * O sentido inverso, para o cloudez-pull: o comando remoto escreve um tar.gz
+ * em stdout, e o `tar` local o extrai em `localDir`. Mesmo pipe por
+ * descritor do envio. Devolve `{ logs, erro }`, como `transferir`.
+ */
+export function receber(alvo, comando, localDir) {
+  const ssh = spawn("ssh", argsSsh(alvo, comando), { stdio: ["ignore", "pipe", "pipe"] })
+  const tar = spawn("tar", ["xzf", "-", "-C", localDir], { stdio: [ssh.stdout, "ignore", "pipe"] })
+  ssh.stdout.destroy()
+
+  let sshErr = ""
+  let tarErr = ""
+  ssh.stderr.setEncoding("utf8")
+  tar.stderr.setEncoding("utf8")
+  ssh.stderr.on("data", (d) => { sshErr += d })
+  tar.stderr.on("data", (d) => { tarErr += d })
+
+  /**
+   * Aqui o produtor é o ssh, e ele é checado primeiro: um tar remoto
+   * que morreu no meio é a causa, e o erro do tar local é só o sintoma.
+   */
+  return Promise.all([esperar(ssh, "ssh"), esperar(tar, "tar")]).then(([doSsh, doTar]) => ({
+    logs: `${sshErr}\n${tarErr}`.trim(),
+    erro: doSsh ?? doTar,
+  }))
+}
+
+// Stdout do comando remoto direto num descritor de arquivo já aberto.
+export function baixar(alvo, comando, fd) {
+  const ssh = spawn("ssh", argsSsh(alvo, comando), { stdio: ["ignore", fd, "pipe"] })
+  let logs = ""
+  ssh.stderr.setEncoding("utf8")
+  ssh.stderr.on("data", (d) => { logs += d })
+  return esperar(ssh, "ssh").then((erro) => ({ logs: logs.trim(), erro }))
+}
+
+/**
+ * BatchMode evita travar num prompt de senha, e accept-new aceita host novo
+ * mas ainda recusa chave trocada. O comando remoto vai como um argumento só.
+ */
+function argsSsh(alvo, comando) {
+  return [
+    "-o", "BatchMode=yes",
+    "-o", "StrictHostKeyChecking=accept-new",
+    "-p", String(alvo.port),
+    `${alvo.user}@${alvo.host}`,
+    comando,
+  ]
 }
 
 /**

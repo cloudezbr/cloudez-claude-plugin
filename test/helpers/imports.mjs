@@ -28,7 +28,7 @@ const rastreados = new Set(
  * incluindo hooks/, que o harness executa fora de qualquer comando.
  */
 const alvos = [...rastreados].filter(
-  (f) => (f.startsWith("bin/") || f.startsWith("mcp/") || f.startsWith("hooks/")) && (f.endsWith(".mjs") || f === "bin/cloudez-sync"),
+  (f) => (f.startsWith("bin/") || f.startsWith("mcp/") || f.startsWith("hooks/")) && (f.endsWith(".mjs") || /^bin\/cloudez-[a-z-]+$/.test(f)),
 )
 
 const problemas = []
