@@ -22,6 +22,10 @@ make_project() {
   CLOUDEZ_TOKEN_FILE="$TEST_TMP/token"
   export CLOUDEZ_TOKEN_FILE
 
+  # Mesma razao, para o estado do deploy e do pull.
+  CLOUDEZ_STATE_DIR="$TEST_TMP/state"
+  export CLOUDEZ_STATE_DIR
+
   # Mesma razao, para o guard-rail de escrita.
   CLOUDEZ_GUARD_DIR="$TEST_TMP/guard"
   export CLOUDEZ_GUARD_DIR
@@ -189,4 +193,33 @@ deploy_state() {
 }
 JSON
   printf '%s' "$id"
+}
+
+# pull_state <pull_id> <files> <files_with_uploads> [database]: escreve o estado
+# que o cloudez-pull le, no CLOUDEZ_STATE_DIR do teste. Por node, e nao por
+# heredoc, porque os comandos remotos tem aspas e quebras de linha.
+pull_state() {
+  mkdir -p "$CLOUDEZ_STATE_DIR"
+  node -e '
+    const [id, files, comUploads, database] = process.argv.slice(1)
+    const estado = {
+      pull_id: id, domain: "example.com", kind: database ? "wordpress" : "html",
+      source: "/home/deploy/example.com/www",
+      ssh: { host: "srv.example.com", user: "deploy", port: 22 },
+      commands: { files, files_with_uploads: comUploads, ...(database ? { database } : {}) },
+    }
+    require("node:fs").writeFileSync(`${process.env.CLOUDEZ_STATE_DIR}/${id}.json`, JSON.stringify(estado))
+  ' "$@"
+  printf '%s' "$1"
+}
+
+# ssh_que_executa: poe na frente do PATH um ssh que roda o comando remoto aqui,
+# e o tar de verdade no lugar do mock, para o pacote ser extraido de fato.
+ssh_que_executa() {
+  local bin="$TEST_TMP/bin-exec"
+  mkdir -p "$bin"
+  printf '#!/bin/sh\nprintf "ssh %%s\\n" "$*" >> "${MOCK_LOG:-/dev/null}"\neval "sh -c \\"\\$$#\\""\n' > "$bin/ssh"
+  chmod +x "$bin/ssh"
+  ln -sf "$(PATH=/usr/bin:/bin command -v tar)" "$bin/tar"
+  export PATH="$bin:$PATH"
 }

@@ -181,14 +181,14 @@ ESTADO="mcp/cloudez-state.mjs"
 
 # Mesma razao do teste equivalente da biblioteca de auth: se alguem apontar o
 # bundle:state para o index.ts, isto estoura no timeout em vez de pendurar a
-# suite. E as tres funcoes sao o contrato que o cloudez-sync importa — faltando
-# uma, o sync quebra em runtime, longe daqui.
+# suite. E as funcoes sao o contrato que o cloudez-sync e o cloudez-pull
+# importam: faltando uma, o adaptador quebra em runtime, longe daqui.
 @test "importar o bundle do estado nao sobe servidor nenhum" {
   run node -e "
     const t = setTimeout(() => { console.error('pendurou'); process.exit(1) }, 5000)
     import('./$ESTADO').then((m) => {
       clearTimeout(t)
-      const faltando = ['loadState','saveState','statePath']
+      const faltando = ['loadState','saveState','statePath','loadPullState']
         .filter((n) => typeof m[n] !== 'function')
       if (faltando.length) { console.error('faltando: ' + faltando); process.exit(1) }
       process.exit(0)

@@ -308,9 +308,9 @@ aprovar_para() {
 # ---------------------------------------------------------------- o Windows --
 
 # Sem o .cmd, quem chama pelo cmd ou pelo PowerShell nao acha o comando. O
-# conteudo deriva o alvo do nome do arquivo, entao os tres sao iguais.
+# conteudo deriva o alvo do nome do arquivo, entao todos sao iguais.
 @test "guard: os launchers Windows existem e sao iguais ao do sync" {
-  for nome in cloudez-approve cloudez-login; do
+  for nome in cloudez-approve cloudez-login cloudez-pull; do
     cmp -s "$PLUGIN_ROOT/bin/cloudez-sync.cmd" "$PLUGIN_ROOT/bin/$nome.cmd"
   done
 }

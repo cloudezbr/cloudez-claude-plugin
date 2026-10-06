@@ -1,7 +1,7 @@
 ---
-description: Converte um site que já existe na Cloudez (WordPress, html ou outro tipo) para o tipo Claude, guardando os arquivos atuais num backup no servidor, e publica o projeto local nele. Use quando o site do .cloudez.yaml não for do tipo Claude e o usuário quiser fazer deploy nele.
+description: Converte um site que já existe na Cloudez (WordPress, html ou outro tipo) para o tipo Claude, guardando os arquivos atuais num backup no servidor, e publica o projeto local nele. Sem o código na máquina, baixa antes o site WordPress ou html do servidor e monta o Compose dele. Use quando o site do .cloudez.yaml não for do tipo Claude e o usuário quiser fazer deploy nele, mesmo sem ter o código local.
 argument-hint: "[domain] [environment]"
-allowed-tools: mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_find_compose, mcp__cloudez__cloudez_list_local_ssh_keys, mcp__cloudez__cloudez_authorize_ssh_key, mcp__cloudez__cloudez_convert_site, mcp__cloudez__cloudez_configure_site, Bash(cloudez-setup:*), Read, AskUserQuestion
+allowed-tools: mcp__cloudez__cloudez_auth_status, mcp__cloudez__cloudez_panel_info, mcp__cloudez__cloudez_signup, mcp__cloudez__cloudez_resend_phone_code, mcp__cloudez__cloudez_confirm_phone, mcp__cloudez__cloudez_get_site, mcp__cloudez__cloudez_find_compose, mcp__cloudez__cloudez_list_local_ssh_keys, mcp__cloudez__cloudez_authorize_ssh_key, mcp__cloudez__cloudez_convert_site, mcp__cloudez__cloudez_configure_site, mcp__cloudez__cloudez_begin_pull, mcp__cloudez__cloudez_prepare_wordpress, Bash(cloudez-setup:*), Bash(cloudez-pull:*), Read, AskUserQuestion
 ---
 
 Argumentos recebidos: `$ARGUMENTS` — o domínio e o environment, os dois opcionais.
@@ -49,7 +49,7 @@ Pelo `stack`:
   — não há o que converter. Diga que o site já está pronto para receber deploy e
   ofereça o `/cloudez:deploy`. Fim.
 - **`claude` sem esse `app_root_path`** — uma conversão anterior não chegou ao fim.
-  Siga normalmente: a tool do passo 6 percebe e só termina o que faltou.
+  Siga normalmente: a tool do passo 8 percebe e só termina o que faltou.
 - **qualquer outro** (`wordpress`, `html`, ...) — é o caso deste comando. Vá direto para o passo 3.
 
 ## 3. Perguntar se o usuário quer converter
@@ -74,29 +74,93 @@ diga em termos do que acontece, sem nome de campo ou arquivo:
 Opções: converter e publicar, ou cancelar. **Sem aceite explícito, pare.** É a
 única etapa deste plugin que tira do ar um site que estava funcionando.
 
-## 4. O projeto tem Compose?
+## 4. Chave SSH desta máquina
+
+O download, o backup e o deploy conectam por SSH. Siga o passo 6 do
+`commands/setup.md`, lendo o arquivo em vez de reconstruir o procedimento.
+
+Se a chave foi autorizada agora, lembre que ela leva até um minuto para valer no
+servidor: um `ssh_failed` logo depois disso é esse atraso.
+
+## 5. O projeto tem o código do site?
+
+Olhe o diretório do projeto. Se ele só tem `.cloudez.yaml`, `.git`, `.gitignore`,
+`.claude` ou `.DS_Store`, o usuário não tem o código na máquina, e o caminho é
+baixar o site do servidor. Isso vale para `wordpress` e `html`; para outro tipo,
+diga que o download não cobre aquele tipo e peça o código ao usuário.
+
+Com o código no diretório, pule para o passo 6.
+
+**Inspecionar.** Antes de qualquer pergunta:
+
+```
+cloudez_begin_pull(domain: "<domain>")
+```
+
+Ela não altera nada no servidor. Devolve o `pull_id`, o `kind` (`wordpress` ou
+`html`) e os tamanhos medidos lá: `total_bytes` (tudo, com os uploads),
+`uploads_bytes` (`wp-content/uploads`) e `database_bytes`. Campo ausente quer
+dizer que a medição falhou: diga que não se sabe, não chute.
+
+**`source_not_found`**: não há arquivos no servidor. Diga isso e peça o código ao
+usuário.
+
+**Oferecer o download.** Com AskUserQuestion, ofereça baixar o site do servidor
+para o diretório do projeto. No WordPress, as opções são baixar **sem** as mídias
+(`wp-content/uploads`), baixar **com** elas, ou não baixar e trazer o código por
+conta própria. Diga, em cada opção, quanto será baixado e quanto disco ocupa na
+máquina: sem as mídias é `total_bytes` menos `uploads_bytes`; com elas,
+`total_bytes`. Some o banco quando houver `database_bytes`, e diga que os tamanhos
+são do disco do servidor, sem compressão. Sem as mídias o site local abre com as
+imagens quebradas, e produção não perde nada: lá elas continuam no servidor. Num
+`html`, as opções são baixar ou não. Sem aceite, não baixe: peça o código.
+
+Se vier `database_unavailable`, diga ao usuário que o banco não vem junto, e por
+quê: sem ele o WordPress local não abre.
+
+**Baixar:**
+
+```sh
+cloudez-pull <pull_id> <diretório do projeto>                  # sem os uploads
+cloudez-pull <pull_id> <diretório do projeto> --with-uploads   # com eles
+```
+
+Ele recusa um diretório com código (`directory_not_empty`) sem apagar nada. No
+WordPress, o dump do banco fica em `.cloudez/db/dump.sql.gz`, e o `cloudez-pull`
+garante `.cloudez/db/` no `.gitignore`, que é o que o mantém fora do deploy.
+
+- **`transfer_failed`**: o que chegou ficou no diretório. Mostre o `logs`, e só
+  repita com o usuário de acordo em esvaziar o diretório.
+- **`database_dump_failed`**: os arquivos chegaram e o banco não. Mostre o
+  `logs` e diga que o WordPress local não abre sem ele.
+
+**O `wp-config.php` baixado tem a senha do banco de produção.** Diga ao usuário
+que não commite nada até o Compose estar escrito, porque é ali que esse arquivo é
+reescrito sem a senha. Não mostre o conteúdo dele na conversa.
+
+## 6. O projeto tem Compose?
 
 ```
 cloudez_find_compose(directory: "<diretório do projeto>")
 ```
 
-**`compose: false`** — execute o `/cloudez:compose` **antes** de converter, e só
+**`compose: false`**: execute o `/cloudez:compose` **antes** de converter, e só
 volte quando o arquivo estiver escrito. Converter primeiro deixaria o site fora do
 ar pelo tempo de escrever o Compose junto com o usuário, em vez de pelo tempo de um
-deploy.
+deploy. Para um WordPress baixado no passo 5, é a seção do WordPress daquele
+comando que vale.
 
-Guarde a porta que o Compose publica (`ports[].published`): é a `custom_port` do
-passo 7.
+Guarde a porta que a sobreposição põe em produção, ou a que o Compose publica
+(`ports[].published`): é a `custom_port` do passo 10.
 
-## 5. Chave SSH desta máquina
+## 7. Testar na máquina, antes de converter
 
-O backup e o deploy conectam por SSH. Siga o passo 6 do `commands/setup.md`, lendo
-o arquivo em vez de reconstruir o procedimento.
+Só quando o site foi baixado no passo 5. Ofereça o `/cloudez:dev` antes de
+converter: **o site ainda está no ar**, e é o único momento em que um problema do
+Compose não custa downtime. Se o usuário aceitar, execute o comando e volte aqui
+quando ele disser que o site local está certo.
 
-Se a chave foi autorizada agora, lembre que ela leva até um minuto para valer no
-servidor: um `ssh_failed` no passo 6 logo depois disso é esse atraso.
-
-## 6. Converter
+## 8. Converter
 
 ```
 cloudez_convert_site(domain: "<domain>", user_confirmed: true)
@@ -105,14 +169,32 @@ cloudez_convert_site(domain: "<domain>", user_confirmed: true)
 A tool troca o tipo e, só depois de confirmar a troca, move o conteúdo do site
 para o backup.
 
-**Sucesso** — diga onde ficou o backup (`backup_path`), em uma frase. `moved: 0`
+**Sucesso**: diga onde ficou o backup (`backup_path`), em uma frase. `moved: 0`
 quer dizer que não havia nada a guardar; não é erro.
 
-**`ssh_failed`** — o tipo **já foi trocado**, e os arquivos continuam onde estavam.
+**`ssh_failed`**: o tipo **já foi trocado**, e os arquivos continuam onde estavam.
 Diga isso, espere um minuto se a chave acabou de ser autorizada, e chame a mesma
 tool de novo: ela refaz só o backup. Não siga para o deploy sem o backup feito.
 
-## 7. Configurar o site
+## 9. Levar o WordPress para o `shared/`
+
+Só para um WordPress com o Compose da seção do WordPress do `/cloudez:compose`:
+
+```
+cloudez_prepare_wordpress(domain: "<domain>")
+```
+
+Copia o `wp-content` do backup para o `shared/` do site e grava a senha do banco,
+o prefixo e os salts no arquivo de ambiente, lidos do `wp-config.php` do backup
+**dentro do servidor**: nenhum valor passa pela conversa. Repetir é seguro.
+
+- **`missing`** não vazio: aquelas chaves não estavam no `wp-config.php`. Sem as
+  do banco o site não conecta; pergunte o valor ao usuário e grave com
+  `cloudez_set_env`.
+- **`wp_content: "absent"`**: o backup não tinha `wp-content`, e o primeiro
+  deploy vai usar o do projeto.
+
+## 10. Configurar o site
 
 O usuário já aceitou a saída do ar no passo 3, então isto não pede um segundo
 aceite:
@@ -121,15 +203,15 @@ aceite:
 cloudez_configure_site(
   domain: "<domain>",
   app_root_path: "claude/current",
-  custom_port: "<a porta do passo 4>",
-  framework: "<o framework do projeto, escolhido como no passo 2 do setup>"
+  custom_port: "<a porta do passo 6>",
+  framework: "<o framework do projeto, escolhido como no passo 2 do setup; wordpress para o site baixado no passo 5>"
 )
 ```
 
 Se vier erro dizendo que o valor **não mudou**, não siga para o deploy: o site
 publicaria sem aparecer.
 
-## 8. Publicar
+## 11. Publicar
 
 Execute o `/cloudez:deploy` com o mesmo environment, sem perguntar de novo: o
 aceite do passo 3 já foi para converter **e** publicar. É o deploy que traz o site

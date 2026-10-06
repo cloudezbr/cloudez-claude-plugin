@@ -1,13 +1,14 @@
 ---
 name: convert
-description: Converte um site que já existe na Cloudez — WordPress, html ou outro tipo — para o tipo Claude, com backup dos arquivos no servidor, e publica o projeto local nele. Use quando o usuário quiser fazer deploy num site da Cloudez que ainda não é do tipo Claude, ou pedir para converter, migrar ou trocar o tipo de um site.
+description: Converte um site que já existe na Cloudez (WordPress, html ou outro tipo) para o tipo Claude, com backup dos arquivos no servidor, e publica o projeto local nele. Quem não tem o código na máquina pode baixar antes o WordPress ou o html do servidor. Use quando o usuário quiser fazer deploy num site da Cloudez que ainda não é do tipo Claude, pedir para converter, migrar ou trocar o tipo de um site, ou quiser trazer para o Claude Code um site WordPress ou html que só existe na Cloudez.
 ---
 
 # Converter um site para o tipo Claude
 
 Esta skill não contém procedimento. Ela existe para que pedidos em linguagem
-natural — "converte meu WordPress", "quero publicar no site que já tenho na
-Cloudez" — cheguem ao mesmo lugar que `/cloudez:convert`.
+natural, como "converte meu WordPress", "quero publicar no site que já tenho na
+Cloudez" ou "baixa meu WordPress da Cloudez para eu mexer", cheguem ao mesmo lugar
+que `/cloudez:convert`.
 
 ## Antes de encaminhar: o usuário está autenticado?
 

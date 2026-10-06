@@ -31,7 +31,7 @@ O transporte dos arquivos é `tar` em stream sobre `ssh`, feito localmente pelo
 
 | Camada | Quem faz | O quê |
 |---|---|---|
-| **Data plane** | `bin/cloudez-sync` (Node), no host do usuário | mover os bytes para o servidor |
+| **Data plane** | `bin/cloudez-sync` e `bin/cloudez-pull` (Node), no host do usuário | mover os bytes para o servidor, e do servidor para o projeto (§3.25) |
 | **Control plane** | tools MCP | descobrir o destino, registrar o deploy, ativar a release, rollback |
 
 **O MCP nunca transporta arquivos.** Ele diz *para onde* enviar e *o que fazer
@@ -1465,7 +1465,7 @@ tê-lo gasto.
 
 Pedido de contratação **paga**, e ausência de `trial_ia_plan_id` (revenda sem
 plano trial configurado), levam ao mesmo lugar — não há tool: a contratação é
-manual, em `<panel_host>/clouds/create` (ver §3.25).
+manual, em `<panel_host>/clouds/create` (ver §3.27).
 
 ---
 
@@ -1538,7 +1538,7 @@ quem chama a rodá-la uma vez por conta — no cadastro, ou no
 só para o cadastro: o limite de um trial por conta é da Cloudez, que recusa o
 segundo com `trial_already_exists` (abaixo). **Não é resposta para
 "contratar um cloud" sem adjetivo**: contratação paga não tem tool, de
-propósito (§3.25) — é dinheiro de verdade e escolha de plano do usuário, não
+propósito (§3.27) — é dinheiro de verdade e escolha de plano do usuário, não
 algo que se decida por ele. A orientação nesse caso é sempre a mesma, manual:
 abrir `<panel_host>/clouds/create` no painel.
 
@@ -1873,7 +1873,134 @@ com o ssh executando o script num diretório temporário.
 
 ---
 
-### 3.25 Fora do escopo, por enquanto
+### 3.25 `cloudez_begin_pull` — **mutating** (só estado local)
+
+Prepara o download de um site WordPress ou `html` que já existe na Cloudez, para
+quem vai convertê-lo sem ter o código na máquina. É o par do `begin_deploy` no
+sentido inverso: a tool inspeciona por ssh e grava o estado; quem move os bytes é
+o `bin/cloudez-pull`. Chamada no `/cloudez:convert`, **antes** da conversão.
+
+```jsonc
+// input
+{ "type": "object",
+  "properties": { "domain": { "type": "string" } },
+  "required": ["domain"], "additionalProperties": false }
+```
+
+```jsonc
+// output
+{
+  "pull_id": "pull_3fa91c02",
+  "kind": "wordpress",              // ou "html"
+  "total_bytes": 734003200,         // ausente se o du falhou
+  "uploads_bytes": 629145600,       // ausente sem wp-content/uploads
+  "database_bytes": 41943040,       // ausente se a consulta falhou
+  "database_unavailable": "...",    // só no WordPress sem mysqldump nem mariadb-dump
+  "excluded": ["claude", "bkp-*", ".git", "wp-content/cache", "wp-content/litespeed", "wp-content/uploads"]
+}
+```
+
+**A fonte.** `~/<domain>/www`, se tiver qualquer entrada além do `claude/` deste
+plugin e dos `bkp-*`; senão, o `bkp-*` mais recente, que é onde uma conversão
+anterior deixou o site. O caminho devolvido pelo servidor é validado contra o
+alfabeto que pode ir entre aspas num comando remoto antes de ser gravado
+(`remote_path_unsafe`). `kind` é `wordpress` quando a fonte tem `wp-config.php` e
+`wp-includes/`.
+
+**Os tamanhos** são medidos no servidor, sem compressão: `du -sk`, em KiB
+convertidos para bytes, e, para o banco, a soma de `data_length + index_length`
+no `information_schema`, com a credencial lida do `wp-config.php` lá mesmo.
+`total_bytes` é o que viria com os uploads; sem eles, `total_bytes -
+uploads_bytes`. Campo que não pôde ser medido sai ausente.
+
+**O estado** vai para o mesmo diretório do estado do deploy, em
+`pull_<8 hex>.json`, com o destino ssh e três comandos remotos completos:
+`files` e `files_with_uploads`, que escrevem um `tar.gz` em stdout a partir da
+fonte, e `database`, só no WordPress, que escreve o dump em gzip
+(`mysqldump --single-transaction --quick --no-tablespaces`, ou `mariadb-dump`,
+com a senha por `MYSQL_PWD`). O dump que falha faz o comando sair não-zero mesmo
+com o `gzip` terminando bem. O `pull_id` deriva do domínio e da fonte, então
+repetir a chamada regrava o mesmo arquivo. O `tar` remoto aceita o código 1, que
+o GNU tar usa para arquivo alterado durante a leitura; falha de leitura sai 2.
+
+**Erros próprios:** `source_not_found` (nem www com conteúdo, nem `bkp-*`),
+`remote_path_unsafe`, `missing_ssh_target` (com o `ssh_unavailable` do site no
+`hint`), `ssh_failed`.
+
+**O adaptador.** `cloudez-pull <pull_id> <diretório> [--with-uploads]` recusa um
+diretório com algo além de `.cloudez.yaml`, `.git`, `.gitignore`, `.claude` e
+`.DS_Store` (`directory_not_empty`, sem apagar nada), extrai os arquivos com
+`ssh` ligado ao `tar` local por descritor, e grava o dump em
+`<diretório>/.cloudez/db/dump.sql.gz`, apagado se o comando falhar
+(`database_dump_failed`). Garante `.cloudez/db/` no `.gitignore`, que é o que
+mantém o dump fora do deploy, e devolve as linhas que o `.gitignore` do site, se
+vier, tiver tirado do projeto.
+
+**Não verificado contra servidor real:** se `du`, `mysqldump`/`mariadb-dump` e o
+cliente `mysql` existem no servidor. Os comandos foram exercitados com GNU tar,
+`dash` e clientes do MySQL falsos.
+
+---
+
+### 3.26 `cloudez_prepare_wordpress` — **mutating**
+
+Leva o WordPress de um site recém-convertido para o `shared/`, de onde o Compose
+do WordPress (seção do WordPress em `commands/compose.md`) o lê. Chamada
+**depois** de `cloudez_convert_site` e **antes** do deploy.
+
+```jsonc
+// input
+{ "type": "object",
+  "properties": { "domain": { "type": "string" } },
+  "required": ["domain"], "additionalProperties": false }
+```
+
+```jsonc
+// output
+{
+  "domain": "meusite.com.br",
+  "source": "/home/u/meusite.com.br/www/bkp-20261001153000",
+  "wp_content": "seeded",             // "existing" | "absent"
+  "env_file": "/home/u/meusite.com.br/www/claude/shared/.cloudez.env",
+  "added": ["WORDPRESS_AUTH_KEY", "WORDPRESS_DB_HOST", "..."],
+  "kept": [],
+  "missing": []
+}
+```
+
+**Só com o site já `claude`.** Outro tipo falha com `site_not_converted`, sem ssh.
+
+**A fonte** é o `bkp-*` mais recente com `wp-config.php`; sem nenhum, o próprio
+`www`, se tiver um. Sem nenhum dos dois, `source_not_found`.
+
+**O `wp-content`** vai para `<root>/shared/wp-content` por `cp -al` (hardlink,
+sem dobrar o disco), com `cp -a` quando o hardlink não é possível. O backup fica
+onde estava. Com hardlink, um arquivo editado no lugar muda nos dois; o
+WordPress costuma gravar arquivo novo, mas não é garantia. Um
+`shared/wp-content` que já existe não é tocado (`existing`).
+
+**O arquivo de ambiente.** Para `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`,
+`TABLE_PREFIX` e os oito salts, grava `WORDPRESS_<nome>=<valor>` no
+`.cloudez.env` (modo 600, escrita atômica, como o `cloudez_set_env`), só quando a
+chave ainda não está lá. O `$` do valor é dobrado, porque o `env_file` do Compose
+lê `$$` como `$` literal. `DB_HOST` `localhost`, com ou sem porta ou socket,
+vira `127.0.0.1`: o container em host mode não tem o socket do MySQL do servidor.
+Os valores vão do `wp-config.php` ao `.cloudez.env` por um script que roda no
+servidor; **nenhum deles aparece no retorno**, que traz só os nomes.
+
+**Idempotente.** Repetir não sobrescreve nada: tudo vem em `kept`.
+
+**Erros próprios:** `site_not_converted`, `source_not_found`,
+`missing_ssh_target`, `ssh_failed` (`retryable: true`).
+
+**Não verificado contra servidor real:** se o MySQL do servidor aceita TCP em
+`127.0.0.1`, e se o `cp -al` funciona entre o `bkp-*` e o `shared/` em todo
+servidor. Coberto pela suíte do `cloudez-mcp`, com o script executado em `sh`
+do macOS e em `dash` com as ferramentas GNU.
+
+---
+
+### 3.27 Fora do escopo, por enquanto
 
 Uma tool saiu desta proposta junto com a feature correspondente do plugin. Fica
 registrada para não ser redescoberta do zero:
@@ -1967,6 +2094,10 @@ Códigos previstos:
 | `cloud_limit_reached` | não | limite de clouds da conta; a Cloudez pede para contatar o suporte |
 | `site_creation_unconfirmed` | não | o POST de `cloudez_create_site` falhou depois de enviado; o site pode ter sido criado mesmo assim — confira `cloudez_get_site` com o mesmo domínio antes de repetir |
 | `confirmation_required` | não | `cloudez_convert_site` chamada sem `user_confirmed: true`; nada foi alterado. Pergunte ao usuário antes |
+| `site_not_converted` | não | `cloudez_prepare_wordpress` num site que ainda não é `claude`; converta antes |
+| `source_not_found` | não | não há arquivos do site no servidor (`cloudez_begin_pull`), ou nenhum `wp-config.php` no `www` nem nos `bkp-*` (`cloudez_prepare_wordpress`) |
+| `remote_path_unsafe` | não | o servidor devolveu um caminho fora do alfabeto que pode ir num comando remoto; nada foi gravado |
+| `pull_not_found` | não | `pull_id` desconhecido ou fora do formato, no estado local |
 O campo `retryable` importa: sem ele o modelo ou desiste de erro transitório ou
 insiste em erro permanente.
 

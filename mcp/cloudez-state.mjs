@@ -1,4 +1,4 @@
-// cloudez-mcp 0.2.28 — gerado por 'npm run bundle'. Nao edite.
+// cloudez-mcp 0.2.29 — gerado por 'npm run bundle'. Nao edite.
 
 // src/deploy-state.ts
 import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
@@ -53,7 +53,26 @@ function saveState(state) {
   writeFileSync(file, JSON.stringify(state, null, 2));
   return state;
 }
+
+// src/pull-state.ts
+import { mkdirSync as mkdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { join as join2 } from "node:path";
+var PULL_ID = /^pull_[0-9a-f]{8}$/;
+function loadPullState(pullId) {
+  if (!PULL_ID.test(pullId)) throw desconhecido(pullId);
+  try {
+    return JSON.parse(readFileSync2(join2(stateDir(), `${pullId}.json`), "utf8"));
+  } catch {
+    throw desconhecido(pullId);
+  }
+}
+function desconhecido(pullId) {
+  return new ToolError("pull_not_found", `pull_id '${pullId}' desconhecido.`, {
+    hint: "Chame cloudez_begin_pull e use o pull_id que ele devolver."
+  });
+}
 export {
+  loadPullState,
   loadState,
   saveState,
   statePath
