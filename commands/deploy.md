@@ -424,6 +424,14 @@ de campo — diga em termos simples: "o container foi recriado e está rodando",
 ou, quando `recreated: false`, "o container não precisou ser recriado, porque o
 conteúdo não mudou".
 
+**Se vier `compose.shared_merged`**, diga ao usuário que aquele diretório já
+estava parcialmente no armazenamento que sobrevive aos deploys e foi completado
+com o que a versão anterior do site tinha, sem apagar nem sobrescrever nada, e
+diga onde ficou a cópia da versão anterior (`compose.shared_merge_backup`). Com
+`compose.shared_merge_conflicts`, liste esses arquivos: ficou a versão que já
+estava no armazenamento, e a outra está na cópia. Peça para o usuário conferir se
+algum deles precisa da versão antiga.
+
 O `project` vem do domínio, não do diretório, e sobrepõe um `name:` do usuário —
 [A8](#a8).
 

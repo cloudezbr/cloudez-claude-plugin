@@ -935,6 +935,26 @@ exigiu um `docker inspect` à mão, fora do fluxo. A medição é o conjunto de 
 `ps -q` antes e depois, agregado por projeto e não por container. O campo **some**
 quando não foi possível medir — `false` afirmaria "não recriou" sem ter medido.
 
+**Um `shared/` que existia só em parte é completado antes do link.** Acontece
+quando um diretório passa a ser compartilhado inteiro depois de só alguns
+subdiretórios dele terem sido: o WordPress que compartilhava `wp-content/uploads`,
+`plugins` e `themes` e passou a compartilhar o `wp-content`. Sem isto o
+`shared/wp-content` já existiria, nada seria semeado, e o site perderia o que a
+release anterior servia de dentro dela (`languages/`, `mu-plugins/`,
+`object-cache.php`). A condição é o `shared/<dir>` existir e o `<dir>` da release
+anterior ser um diretório de verdade, e não um link para o `shared/`:
+
+- a release anterior é guardada por hardlink em
+  `<root>/.cloudez/shared-merge/<release anterior>/<dir>`, fora do alcance da poda;
+- tudo o que ela tem e o `shared/` não tem é copiado, sem sobrescrever nada. Os
+  links dela para o `shared/` não são seguidos;
+- um arquivo que existe nos dois lados com conteúdo diferente fica com a versão
+  do `shared/`, e entra em `compose.shared_merge_conflicts`; a outra está no backup.
+
+O retorno traz `compose.shared_merged` (os diretórios completados) e
+`compose.shared_merge_backup` (onde a anterior ficou). Repetir o deploy não
+duplica nada, e o deploy seguinte, cuja anterior já é link, não mescla mais.
+
 **O inventário de containers é separado da saída do build por um marcador**, não
 pelo formato das linhas. Os dois saem no mesmo fluxo, e no build vai tudo que os
 passos `RUN` imprimiram: um filtro por contagem de campos aceitaria qualquer
